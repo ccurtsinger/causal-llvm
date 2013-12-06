@@ -1,4 +1,4 @@
-LEVEL=../../..
-DIRS=pass runtime
+ROOT = ..
+TARGETS = $(ROOT)/libcausal.$(SHLIB_SUFFIX)
 
-include $(LEVEL)/Makefile.common
+include $(ROOT)/common.mk

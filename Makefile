@@ -1,5 +1,5 @@
-LEVEL = ../..
+ROOT = .
 DIRS = lib
 
-include $(LEVEL)/Makefile.common
+include $(ROOT)/common.mk
 

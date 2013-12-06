@@ -1,5 +1,8 @@
-lib/pass/Release+Asserts
-lib/runtime/Release+Asserts
+.debug
+.release
+libcausal.so
+libcausal.dylib
+lib/obj
 
 tests/histogram/bin
 tests/histogram/histogram_datafiles
