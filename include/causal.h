@@ -21,7 +21,7 @@ static void __init_counter(int kind, size_t* ctr, const char* filename, int line
       __causal_counter_initialized = 1; \
     } \
     __causal_counter++; \
-  } \
+  }
 
 #define PROGRESS_COUNTER 1
 #define BEGIN_COUNTER 2
