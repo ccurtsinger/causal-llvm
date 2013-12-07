@@ -21,7 +21,7 @@ DIRS ?=
 LIBS ?= 
 
 # Set the default include directories
-INCLUDE_DIRS ?= 
+INCLUDE_DIRS += $(ROOT)/include
 
 # Recurse into subdirectories for the 'clean' and 'build' targets
 RECURSIVE_TARGETS ?= clean build
