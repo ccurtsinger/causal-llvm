@@ -1,5 +1,5 @@
-#if !defined(CAUSAL_LIB_RUNTIME_ARCH_H)
-#define CAUSAL_LIB_RUNTIME_ARCH_H
+#if !defined(CAUSAL_RUNTIME_ARCH_H)
+#define CAUSAL_RUNTIME_ARCH_H
 
 #if defined(__APPLE__)
 	#define _OSX(x) x

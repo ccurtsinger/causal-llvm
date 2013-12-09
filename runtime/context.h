@@ -1,5 +1,5 @@
-#if !defined(CAUSAL_LIB_RUNTIME_CONTEXT_H)
-#define CAUSAL_LIB_RUNTIME_CONTEXT_H
+#if !defined(CAUSAL_RUNTIME_CONTEXT_H)
+#define CAUSAL_RUNTIME_CONTEXT_H
 
 #if !defined(_XOPEN_SOURCE)
 // Digging inside of ucontext_t is deprecated unless this macros is defined

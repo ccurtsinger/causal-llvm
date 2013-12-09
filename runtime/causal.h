@@ -1,5 +1,5 @@
-#if !defined(CAUSAL_LIB_RUNTIME_CAUSAL_H)
-#define CAUSAL_LIB_RUNTIME_CAUSAL_H
+#if !defined(CAUSAL_RUNTIME_CAUSAL_H)
+#define CAUSAL_RUNTIME_CAUSAL_H
 
 #include <pthread.h>
 #include <stdint.h>

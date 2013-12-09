@@ -2,7 +2,7 @@
 .release
 libcausal.so
 libcausal.dylib
-lib/obj
+runtime/obj
 
 tests/histogram/obj
 tests/histogram/histogram
