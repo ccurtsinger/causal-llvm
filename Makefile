@@ -1,5 +1,5 @@
 ROOT = .
-DIRS = lib
+DIRS = runtime
 
 include $(ROOT)/common.mk
 
