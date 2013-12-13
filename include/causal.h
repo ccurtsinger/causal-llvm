@@ -1,22 +1,38 @@
-#if defined(CAUSAL_BUILD)
+#if !defined(CAUSAL_H)
+#define CAUSAL_H
 
-	#if defined(__cplusplus)
-	extern "C" {
-	#endif
+#include <dlfcn.h>
 
-		#if !defined(CAUSAL_PROGRESS)
-			void __causal_progress();
-			#define CAUSAL_PROGRESS __causal_progress()
-		#endif
-	
-	#if defined(__cplusplus)
-	}
-	#endif
+#if defined(__cplusplus)
+extern "C" {
+#endif
 
-#else
+static void __init_counter(int kind, size_t* ctr, const char* filename, int line) {
+  void (*reg)(int, size_t*, const char*, int) = (void (*)(int, size_t*, const char*, int))dlsym(RTLD_DEFAULT, "__causal_register_counter");
+  if(reg != NULL) reg(kind, ctr, filename, line);
+}
 
-	#if !defined(CAUSAL_PROGRESS)
-	#define CAUSAL_PROGRESS
-	#endif
-	
+#define CAUSAL_INCREMENT_COUNTER(kind, file, line) \
+  if(1) { \
+    static __thread unsigned char __causal_counter_initialized = 0; \
+    static __thread size_t __causal_counter = 0; \
+    if(__causal_counter_initialized == 0) { \
+      __init_counter(kind, &__causal_counter, file, line); \
+      __causal_counter_initialized = 1; \
+    } \
+    __causal_counter++; \
+  }
+
+#define PROGRESS_COUNTER 1
+#define BEGIN_COUNTER 2
+#define END_COUNTER 3
+
+#define CAUSAL_PROGRESS CAUSAL_INCREMENT_COUNTER(PROGRESS_COUNTER, __FILE__, __LINE__)
+#define CAUSAL_BEGIN CAUSAL_INCREMENT_COUNTER(BEGIN_COUNTER, __FILE__, __LINE__)
+#define CAUSAL_END CAUSAL_INCREMENT_COUNTER(END_COUNTER, __FILE__, __LINE__)
+
+#if defined(__cplusplus)
+}
+#endif
+
 #endif
