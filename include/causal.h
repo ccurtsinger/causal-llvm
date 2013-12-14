@@ -1,6 +1,10 @@
 #if !defined(CAUSAL_H)
 #define CAUSAL_H
 
+#ifndef __USE_GNU
+#  define __USE_GNU
+#endif
+
 #include <dlfcn.h>
 
 #if defined(__cplusplus)

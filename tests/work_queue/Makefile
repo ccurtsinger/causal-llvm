@@ -1,6 +1,6 @@
 ROOT = ../..
 TARGETS = work_queue
-LIBS = pthread
+LIBS = pthread dl
 
 include $(ROOT)/common.mk
 

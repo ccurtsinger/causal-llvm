@@ -1,6 +1,6 @@
 ROOT = ../..
 TARGETS = pca
-LIBS = pthread
+LIBS = pthread dl
 ARGS = > /dev/null
 
 include $(ROOT)/common.mk

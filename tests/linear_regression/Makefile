@@ -1,6 +1,6 @@
 ROOT = ../..
 TARGETS = linear_regression
-LIBS = pthread
+LIBS = pthread dl
 ARGS = linear_regression_datafiles/key_file_500MB.txt
 
 include $(ROOT)/common.mk

@@ -1,6 +1,6 @@
 ROOT = ../..
 TARGETS = pbzip2
-LIBS = bz2 pthread
+LIBS = bz2 pthread dl
 ARGS = -c < data/input.txt > data/output.txt
 
 include $(ROOT)/common.mk

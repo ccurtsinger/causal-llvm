@@ -1,5 +1,5 @@
 ROOT = ..
 TARGETS = $(ROOT)/libcausal.$(SHLIB_SUFFIX)
-LIBS = udis86 pthread
+LIBS = pthread dl
 
 include $(ROOT)/common.mk

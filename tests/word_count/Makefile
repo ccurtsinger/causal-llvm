@@ -1,6 +1,6 @@
 ROOT = ../..
 TARGETS = word_count
-LIBS = pthread
+LIBS = pthread dl
 ARGS = word_count_datafiles/word_100MB.txt
 
 include $(ROOT)/common.mk

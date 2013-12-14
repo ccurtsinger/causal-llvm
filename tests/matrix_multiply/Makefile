@@ -1,6 +1,6 @@
 ROOT = ../..
 TARGETS = matrix_multiply
-LIBS = pthread
+LIBS = pthread dl
 ARGS = 1024	> /dev/null
 
 include $(ROOT)/common.mk

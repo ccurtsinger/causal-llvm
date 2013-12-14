@@ -1,6 +1,6 @@
 ROOT = ../..
 TARGETS = histogram
-LIBS = pthread
+LIBS = pthread dl
 ARGS = histogram_datafiles/large.bmp
 
 include $(ROOT)/common.mk

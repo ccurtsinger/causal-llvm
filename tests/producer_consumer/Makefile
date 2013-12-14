@@ -1,6 +1,6 @@
 ROOT = ../..
 TARGETS = producer_consumer
-LIBS = pthread
+LIBS = pthread dl
 ARGS = 
 
 include $(ROOT)/common.mk

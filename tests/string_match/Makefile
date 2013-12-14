@@ -1,6 +1,6 @@
 ROOT = ../..
 TARGETS = string_match
-LIBS = pthread
+LIBS = pthread dl
 ARGS = string_match_datafiles/key_file_500MB.txt > /dev/null
 
 include $(ROOT)/common.mk
