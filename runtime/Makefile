@@ -1,5 +1,5 @@
 ROOT = ..
 TARGETS = $(ROOT)/libcausal.$(SHLIB_SUFFIX)
-LIBS = pthread dl
+LIBS = pthread dl papi
 
 include $(ROOT)/common.mk
