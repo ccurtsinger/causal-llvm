@@ -12,12 +12,17 @@
 #define END_COLOR "\033[0m"
 
 #if defined(NDEBUG)
+#  define LOG(color, fmt, ...) if(1) { fprintf(stderr, color fmt END_COLOR "\n", ##__VA_ARGS__); }
 #  define INFO(fmt, ...)
-#  define WARNING(fmt, ...) if(1) { fprintf(stderr, WARNING_COLOR fmt END_COLOR "\n", __VA_ARGS__); }
-#  define FATAL(fmt, ...)   if(1) { fprintf(stderr, FATAL_COLOR fmt END_COLOR "\n", __VA_ARGS__); abort(); }
 #else
-#  define INFO(fmt, ...)    if(1) { fprintf(stderr, SRC_COLOR "[%s:%d] " INFO_COLOR fmt END_COLOR "\n", __FILE__, __LINE__, ##__VA_ARGS__); }
-#  define WARNING(fmt, ...) if(1) { fprintf(stderr, SRC_COLOR "[%s:%d] " WARNING_COLOR fmt END_COLOR "\n", __FILE__, __LINE__, ##__VA_ARGS__); }
-#  define FATAL(fmt, ...)   if(1) { fprintf(stderr, SRC_COLOR "[%s:%d] " FATAL_COLOR fmt END_COLOR "\n", __FILE__, __LINE__, ##__VA_ARGS__); abort(); }
+#  define LOG(color, fmt, ...) if(1) { fprintf(stderr, SRC_COLOR "[%s:%d] " color fmt END_COLOR "\n", __FILE__, __LINE__, ##__VA_ARGS__); }
+#  define INFO(fmt, ...) LOG(INFO_COLOR, fmt, ##__VA_ARGS__)
 #endif
+
+#define WARNING(fmt, ...) LOG(WARNING_COLOR, fmt, ##__VA_ARGS__);
+#define PREFER(cond, fmt, ...) if(!(cond)) { WARNING(fmt, ##__VA_ARGS__); }
+
+#define FATAL(fmt, ...) if(1) { LOG(FATAL_COLOR, fmt, ##__VA_ARGS__); abort(); }
+#define REQUIRE(cond, fmt, ...) if(!(cond)) { FATAL(fmt, ##__VA_ARGS__); }
+
 #endif
