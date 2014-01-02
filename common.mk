@@ -8,6 +8,7 @@ CC = clang
 CXX = clang++
 CFLAGS ?=
 CXXFLAGS ?= $(CFLAGS)
+LINKFLAGS ?=
 
 include $(ROOT)/platforms/$(PLATFORM).mk
 
@@ -107,7 +108,7 @@ $(STATIC_LIB_TARGETS):: $(OBJS) $(INCLUDE_DIRS) $(INCLUDES) Makefile $(ROOT)/com
 
 $(OTHER_TARGETS):: $(OBJS) $(INCLUDE_DIRS) $(INCLUDES) Makefile $(ROOT)/common.mk
 	@echo $(INDENT)[$(notdir $(firstword $(CXX)))] Linking $@ for $(if $(DEBUG),Debug,Release) build
-	@$(CXX) $(CXXFLAGS) $(if $(DEBUG),-g,-DNDEBUG) $(INCFLAGS) $(OBJS) -o $@ $(LIBFLAGS)
+	@$(CXX) $(CXXFLAGS) $(LINKFLAGS) $(if $(DEBUG),-g,-DNDEBUG) $(INCFLAGS) $(OBJS) -o $@ $(LIBFLAGS)
 
 $(RECURSIVE_TARGETS)::
 	@for dir in $(DIRS); do \

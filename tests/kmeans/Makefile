@@ -1,7 +1,7 @@
 ROOT = ../..
 TARGETS = kmeans
 LIBS = pthread dl
-ARGS = 
+ARGS =
 
 include $(ROOT)/common.mk
 

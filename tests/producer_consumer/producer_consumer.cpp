@@ -51,6 +51,10 @@ void* consumer(void* arg) {
 		assert(queue[queue_size] == 123);
 		queue[queue_size] = 321;
 		consumed++;
+    if(consumed >= Items) {
+      pthread_cond_signal(&main_condvar);
+    }
+    
 		pthread_mutex_unlock(&queue_lock);
 		pthread_cond_signal(&producer_condvar);
 		CAUSAL_PROGRESS;

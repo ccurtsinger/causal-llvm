@@ -20,6 +20,7 @@ public:
   MAKE_WRAPPER(_Exit, RTLD_NEXT);
   MAKE_WRAPPER(fork, RTLD_NEXT);
   MAKE_WRAPPER(pthread_create, RTLD_NEXT);
+  MAKE_WRAPPER(pthread_exit, RTLD_NEXT);
 };
 
 #endif

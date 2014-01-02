@@ -1,10 +1,12 @@
+#include <dlfcn.h>
+
 #include "causal.h"
 #include "real.h"
 
 #include "../include/causal.h"
 
 __attribute__((constructor)) void ctor() {
-	Causal::getInstance().initialize();
+  Causal::getInstance();
 }
 
 __attribute__((destructor)) void dtor() {
@@ -25,22 +27,28 @@ extern "C" {
   }
 }
 
+typedef void* (*thread_fn_t)(void*);
+
 struct ThreadInit {
-private:
-  void* (*_fn)(void*);
+public:
+  thread_fn_t _fn;
   void* _arg;
 public:
-  ThreadInit(void* (*fn)(void*), void* arg) : _fn(fn), _arg(arg) {}
+  ThreadInit(thread_fn_t fn, void* arg) : _fn(fn), _arg(arg) {}
   void* run() { return _fn(_arg); }
 };
 
-void* thread_wrapper(void* p) {
+extern "C" void* thread_wrapper(void* p) {
   ThreadInit* init = (ThreadInit*)p;
   ThreadInit local_init = *init;
   delete init;
-  Causal::getInstance().initializeThread();
-  return local_init.run();
+  engine::addThread();
+  void* result = local_init.run();
+  engine::removeThread();
+  return result;
 }
+
+size_t threads = 1;
 
 // Wrapped POSIX functions
 extern "C" {
@@ -59,13 +67,19 @@ extern "C" {
     Real::_Exit()(status);
 	}
 	
-	int pthread_create(pthread_t* thread, const pthread_attr_t* attr, void* (*fn)(void*), void* arg) {
-    return Real::pthread_create()(thread, attr, thread_wrapper, new ThreadInit(fn, arg));
+	int pthread_create(pthread_t* thread, const pthread_attr_t* attr, thread_fn_t fn, void* arg) {
+    void* arg_wrapper = (void*)new ThreadInit(fn, arg);
+    return Real::pthread_create()(thread, attr, thread_wrapper, arg_wrapper);
 	}
+  
+  void pthread_exit(void* arg) {
+    engine::removeThread();
+    Real::pthread_exit()(arg);
+  }
 
 	int fork() {
     int result = Real::fork()();
   	if(result == 0) Causal::getInstance().reinitialize();
     return result;
-	}
+  }
 }
