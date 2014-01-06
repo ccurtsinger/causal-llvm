@@ -8,7 +8,7 @@ namespace engine {
   void initialize();
   void addThread();
   void removeThread();
-  //blockmap buildMap();
+  bool inRange(void* p);
   void collectSamples(void** cycle_samples, size_t* cycle_max, void** inst_samples, size_t* inst_max);
 };
 

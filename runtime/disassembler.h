@@ -30,7 +30,7 @@ public:
 	}
 	
   /// Get the destination pointer for the branch
-	operator uintptr_t() {
+	uintptr_t value() {
 		if(_op.type == UD_OP_JIMM) {
 			switch(_op.size) {
 				case 8: return _op.lval.sbyte + _pc;
@@ -172,13 +172,9 @@ public:
 	}
 
   /// Pretty-print the instruction
-	operator string() {
+	const char* toString() {
 		return ud_insn_asm(&_ud);
 	}
-  
-  operator const char*() {
-    return ud_insn_asm(&_ud);
-  }
 };
 
 #endif

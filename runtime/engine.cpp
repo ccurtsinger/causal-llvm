@@ -5,7 +5,14 @@
 #include <pthread.h>
 #include <stdio.h>
 
+#include <set>
+#include <string>
+
+#include "interval.h"
 #include "log.h"
+
+using std::set;
+using std::string;
 
 namespace engine {
   enum {
@@ -121,25 +128,30 @@ namespace engine {
     REQUIRE(PAPI_unregister_thread() == PAPI_OK, "Failed to unregister thread");
   }
   
-  /*blockmap buildMap() {
-    blockmap map;
+  set<interval> _buildCodeMap() {
+    set<interval> code;
     
   	const PAPI_exe_info_t* info = PAPI_get_executable_info();
   	if(info) {
-      map.addFile(info->fullname, info->address_info.text_start, info->address_info.text_end);
+      code.insert(interval(info->address_info.text_start, info->address_info.text_end));
   	}
-  
-    const PAPI_shlib_info_t* lib_info = PAPI_get_shared_lib_info();
+    
+    /*const PAPI_shlib_info_t* lib_info = PAPI_get_shared_lib_info();
     if(lib_info) {
       for(int i=0; i<lib_info->count; i++) {
         // Don't include PAPI or causal
         if(string(lib_info->map[i].name).find("libpapi") == string::npos &&
            string(lib_info->map[i].name).find("libcausal") == string::npos) {
-          map.addFile(lib_info->map[i].name, lib_info->map[i].text_start, lib_info->map[i].text_end);
+          code.insert(interval(lib_info->map[i].text_start, lib_info->map[i].text_end));
         }
       }
-    }
+    }*/
     
-    return map;
-  }*/
+    return code;
+  }
+  
+  bool inRange(void* p) {
+    static set<interval> code = _buildCodeMap();
+    return code.find(p) != code.end();
+  }
 }

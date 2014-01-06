@@ -63,18 +63,15 @@ private:
       
       fprintf(stderr, "  Cycle samples:\n");
       for(size_t i=0; i<cycle_max; i++) {
-        function* f = function::get(cycle_samples[i]);
-        if(f != NULL) {
-          delete f;
+        if(engine::inRange(cycle_samples[i])) {
+          function* f = function::get(cycle_samples[i]);
+          if(f != NULL) {
+            basic_block* b = f->getBlock(cycle_samples[i]);
+            if(b != NULL)
+              fprintf(stderr, "    %s\n", b->toString().c_str());
+            delete f;
+          }
         }
-        
-        /*file* s_file = _map.getFile(cycle_samples[i]);
-        function* s_func = _map.getFunction(cycle_samples[i]);
-        
-        if(s_file != NULL && s_func != NULL) {
-          fprintf(stderr, "    %p (%s : %s + %d)\n", 
-            cycle_samples[i], s_file->getName(), s_func->getName(), s_func->getOffset(cycle_samples[i]));
-        }*/
       }
       
       wait(Time_s);
