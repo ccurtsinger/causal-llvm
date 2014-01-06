@@ -9,9 +9,9 @@
 
 namespace engine {
   enum {
-    CycleSamplePeriod = 1000000,
+    CycleSamplePeriod = 10000000,
     CycleSampleMask = 0x1,
-    InstructionSamplePeriod = 1000000,
+    InstructionSamplePeriod = 10000000,
     InstructionSampleMask = 0x2
   };
   
@@ -121,7 +121,7 @@ namespace engine {
     REQUIRE(PAPI_unregister_thread() == PAPI_OK, "Failed to unregister thread");
   }
   
-  blockmap buildMap() {
+  /*blockmap buildMap() {
     blockmap map;
     
   	const PAPI_exe_info_t* info = PAPI_get_executable_info();
@@ -141,5 +141,5 @@ namespace engine {
     }
     
     return map;
-  }
+  }*/
 }

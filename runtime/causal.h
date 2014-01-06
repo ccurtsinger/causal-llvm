@@ -8,8 +8,8 @@
 
 #include <new>
 
-#include "blockmap.h"
 #include "engine.h"
+#include "function.h"
 #include "log.h"
 #include "real.h"
 
@@ -26,7 +26,6 @@ struct Causal {
 private:
   bool _initialized;
   pthread_t _profiler_thread;
-  blockmap _map;
   
 	Causal() : _initialized(false) {
     initialize();
@@ -35,7 +34,7 @@ private:
   static size_t getTime() {
     struct timespec ts;
     if(clock_gettime(CLOCK_REALTIME, &ts)) {
-      perror("Host::getTime():");
+      perror("getTime():");
       abort();
     }
     return ts.tv_nsec + ts.tv_sec * Time_s;
@@ -58,32 +57,27 @@ private:
     size_t inst_max;
     
     while(true) {
-      cycle_max = 1024;
-      inst_max = 1024;
+      cycle_max = 128;
+      inst_max = 128;
       engine::collectSamples(cycle_samples, &cycle_max, inst_samples, &inst_max);
-      fprintf(stderr, "Sampling complete!\n");
-    
-      /*fprintf(stderr, "  Cycle samples:\n");
-      for(size_t i=0; i<cycle_max; i++) {
-        if(_map.inBounds(cycle_samples[i])) {
-          fprintf(stderr, "    %p (%s : %p)\n", 
-            cycle_samples[i],
-            _map.getFile(cycle_samples[i])->getName(),
-            _map.getFunction(cycle_samples[i]));
-        }
-      }
-    
-      fprintf(stderr, "\n  Instruction samples:\n");
-      for(size_t i=0; i<inst_max; i++) {
-        if(_map.inBounds(inst_samples[i])) {
-          fprintf(stderr, "    %p (%s : %p)\n", 
-            inst_samples[i], 
-            _map.getFile(inst_samples[i])->getName(),
-            _map.getFunction(inst_samples[i]));
-        }
-      }*/
       
-      wait(500 * Time_ms);
+      fprintf(stderr, "  Cycle samples:\n");
+      for(size_t i=0; i<cycle_max; i++) {
+        function* f = function::get(cycle_samples[i]);
+        if(f != NULL) {
+          delete f;
+        }
+        
+        /*file* s_file = _map.getFile(cycle_samples[i]);
+        function* s_func = _map.getFunction(cycle_samples[i]);
+        
+        if(s_file != NULL && s_func != NULL) {
+          fprintf(stderr, "    %p (%s : %s + %d)\n", 
+            cycle_samples[i], s_file->getName(), s_func->getName(), s_func->getOffset(cycle_samples[i]));
+        }*/
+      }
+      
+      wait(Time_s);
     }
   }
   
@@ -104,7 +98,7 @@ public:
       INFO("Initializing");
       engine::initialize();
     
-      _map = engine::buildMap();
+      //_map = engine::buildMap();
     
       // Create the profiler thread
       REQUIRE(Real::pthread_create()(&_profiler_thread, NULL, startProfiler, NULL) == 0,

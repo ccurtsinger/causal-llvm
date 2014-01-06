@@ -4,13 +4,11 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include "blockmap.h"
-
 namespace engine {
   void initialize();
   void addThread();
   void removeThread();
-  blockmap buildMap();
+  //blockmap buildMap();
   void collectSamples(void** cycle_samples, size_t* cycle_max, void** inst_samples, size_t* inst_max);
 };
 

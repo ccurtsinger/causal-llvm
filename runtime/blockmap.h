@@ -27,11 +27,27 @@ public:
   }
 };
 
+class function {
+private:
+  const char* _name;
+  uintptr_t _base;
+  
+public:
+  function(const char* name, uintptr_t base) : _name(name), _base(base) {}
+  
+  const char* getName() {
+    return _name;
+  }
+  
+  ptrdiff_t getOffset(void* p) {
+    return (uintptr_t)p - _base;
+  }
+};
+
 class file {
 private:
   const char* _name;
   uintptr_t _base;
-  //map<interval, function*> _functions;
   
 public:
   file(const char* name, uintptr_t base) : _name(name), _base(base) {}
@@ -44,10 +60,15 @@ public:
     return (uintptr_t)p - _base;
   }
   
-  void* getFunction(void* p) {
+  function* getFunction(void* p) {
     Dl_info info;
     REQUIRE(dladdr(p, &info) != 0, "Failed to located symbol for %p", p);
-    return info.dli_saddr;
+    if(info.dli_saddr != NULL) {
+      // TODO: Don't leak
+      return new function(info.dli_sname, (uintptr_t)info.dli_saddr);
+    } else {
+      return NULL;
+    }
   }
 };
 
@@ -68,7 +89,7 @@ public:
     else return iter->second;
   }
   
-  void* getFunction(void* p) {
+  function* getFunction(void* p) {
     file* f = getFile(p);
     if(f != NULL) {
       return f->getFunction(p);

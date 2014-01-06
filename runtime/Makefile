@@ -1,6 +1,6 @@
 ROOT = ..
 TARGETS = $(ROOT)/libcausal.$(SHLIB_SUFFIX)
-LIBS = pthread dl papi
+LIBS = pthread dl papi udis86
 
 CFLAGS = -g -rdynamic
 

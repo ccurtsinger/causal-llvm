@@ -48,8 +48,6 @@ extern "C" void* thread_wrapper(void* p) {
   return result;
 }
 
-size_t threads = 1;
-
 // Wrapped POSIX functions
 extern "C" {
 	void exit(int status) {
