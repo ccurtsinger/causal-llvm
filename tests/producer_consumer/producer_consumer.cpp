@@ -18,6 +18,8 @@ int consumed = 0;
 int queue_size;
 int queue[QueueSize];
 
+size_t signal_calls = 0;
+
 pthread_mutex_t queue_lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t producer_condvar = PTHREAD_COND_INITIALIZER;
 pthread_cond_t consumer_condvar = PTHREAD_COND_INITIALIZER;
@@ -33,9 +35,11 @@ void* producer(void* arg) {
 		queue_size++;
 		produced++;
 		pthread_mutex_unlock(&queue_lock);
+    __atomic_fetch_add(&signal_calls, 1, __ATOMIC_SEQ_CST);
 		pthread_cond_signal(&consumer_condvar);
 	}
 	pthread_mutex_lock(&queue_lock);
+  __atomic_fetch_add(&signal_calls, 1, __ATOMIC_SEQ_CST);
 	pthread_cond_signal(&main_condvar);
 	pthread_mutex_unlock(&queue_lock);
 	return NULL;
@@ -52,10 +56,12 @@ void* consumer(void* arg) {
 		queue[queue_size] = 321;
 		consumed++;
     if(consumed >= Items) {
+      __atomic_fetch_add(&signal_calls, 1, __ATOMIC_SEQ_CST);
       pthread_cond_signal(&main_condvar);
     }
     
 		pthread_mutex_unlock(&queue_lock);
+    __atomic_fetch_add(&signal_calls, 1, __ATOMIC_SEQ_CST);
 		pthread_cond_signal(&producer_condvar);
 		CAUSAL_PROGRESS;
 	}
@@ -78,4 +84,6 @@ int main(int argc, char** argv) {
 		pthread_cond_wait(&main_condvar, &queue_lock);
 	}
 	pthread_mutex_unlock(&queue_lock);
+  
+  fprintf(stderr, "%lu signal calls\n", signal_calls);
 }

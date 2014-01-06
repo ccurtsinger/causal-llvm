@@ -56,23 +56,28 @@ private:
     void* inst_samples[1024];
     size_t inst_max;
     
+    size_t total_samples = 0;
+    
     while(true) {
-      cycle_max = 128;
-      inst_max = 128;
+      cycle_max = 1024;
+      inst_max = 1024;
       engine::collectSamples(cycle_samples, &cycle_max, inst_samples, &inst_max);
       
-      fprintf(stderr, "  Cycle samples:\n");
-      for(size_t i=0; i<cycle_max; i++) {
-        if(engine::inRange(cycle_samples[i])) {
-          function* f = function::get(cycle_samples[i]);
-          if(f != NULL) {
-            basic_block* b = f->getBlock(cycle_samples[i]);
-            if(b != NULL)
-              fprintf(stderr, "    %s\n", b->toString().c_str());
-            delete f;
+      fprintf(stderr, "  Instruction samples:\n");
+      for(size_t i=0; i<inst_max; i++) {
+        basic_block* b = engine::getBlock(inst_samples[i]);
+        if(b != NULL) {
+          b->sample();
+          if(b->getIndex() == 0) {
+            fprintf(stderr, "  %s\n", engine::getFunction(inst_samples[i])->getName().c_str());
+            fprintf(stderr, "    %s\n", b->toString().c_str());
           }
         }
       }
+      
+      total_samples += inst_max;
+      
+      fprintf(stderr, "%lu total samples\n", total_samples);
       
       wait(Time_s);
     }

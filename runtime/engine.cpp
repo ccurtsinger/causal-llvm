@@ -5,20 +5,23 @@
 #include <pthread.h>
 #include <stdio.h>
 
+#include <map>
 #include <set>
 #include <string>
 
+#include "function.h"
 #include "interval.h"
 #include "log.h"
 
+using std::pair;
 using std::set;
 using std::string;
 
 namespace engine {
   enum {
-    CycleSamplePeriod = 10000000,
+    CycleSamplePeriod = 100000,
     CycleSampleMask = 0x1,
-    InstructionSamplePeriod = 10000000,
+    InstructionSamplePeriod = 100000,
     InstructionSampleMask = 0x2
   };
   
@@ -136,7 +139,7 @@ namespace engine {
       code.insert(interval(info->address_info.text_start, info->address_info.text_end));
   	}
     
-    /*const PAPI_shlib_info_t* lib_info = PAPI_get_shared_lib_info();
+    const PAPI_shlib_info_t* lib_info = PAPI_get_shared_lib_info();
     if(lib_info) {
       for(int i=0; i<lib_info->count; i++) {
         // Don't include PAPI or causal
@@ -145,7 +148,7 @@ namespace engine {
           code.insert(interval(lib_info->map[i].text_start, lib_info->map[i].text_end));
         }
       }
-    }*/
+    }
     
     return code;
   }
@@ -153,5 +156,34 @@ namespace engine {
   bool inRange(void* p) {
     static set<interval> code = _buildCodeMap();
     return code.find(p) != code.end();
+  }
+  
+  function* getFunction(void* p) {
+    static map<interval, function*> functions;
+    
+    if(!inRange(p))
+      return NULL;
+    
+    // Look for an existing function object. If found, return it.
+    map<interval, function*>::iterator iter = functions.find(p);
+    if(iter != functions.end())
+      return iter->second;
+    
+    function* f = function::get(p);
+    if(f != NULL) {
+      functions.insert(pair<const interval, function*>(f->getRange(), f));
+    } else {
+      functions.insert(pair<const interval, function*>(p, NULL));
+    }
+    
+    return f;
+  }
+  
+  basic_block* getBlock(void* p) {
+    function* f = getFunction(p);
+    if(f != NULL)
+      return f->getBlock(p);
+    else
+      return NULL;
   }
 }

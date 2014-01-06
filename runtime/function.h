@@ -26,10 +26,21 @@ private:
   interval _range;
   function* _f;
   size_t _index;
+  size_t _length;
+  size_t _samples;
   
 public:
   basic_block(function* f, size_t index, uintptr_t base, uintptr_t limit) : 
-    _f(f), _index(index), _range(base, limit) {}
+      _f(f), _index(index), _samples(0), _range(base, limit) {
+    
+    // Count instructions in the block, starting at 1 to include the first one
+    _length = 1;
+    // Count until we have reached the last instruction. There may be padding between blocks, 
+    // so disassembly must also stop if we reach an instruction that does not fall through.
+    for(disassembler inst = disassembler(base); !inst.done() && inst.limit() < limit; inst.next()) {
+      _length++;
+    }
+  }
   
   static std::pair<const interval, basic_block>
   makeEntry(function* f, size_t index, uintptr_t base, uintptr_t limit) {
@@ -44,7 +55,15 @@ public:
     return _index;
   }
   
-  string toString();
+  void sample() {
+    _samples++;
+  }
+  
+  string toString() {
+    ostringstream ss;
+    ss << "block " << _index << " [" << _length << " instruction(s), " << _samples << " samples]";
+    return ss.str();
+  }
 };
 
 class function {
@@ -113,8 +132,13 @@ public:
       // Return a new function object
       return new function(info.dli_sname, (uintptr_t)info.dli_saddr);
     } else {
+      INFO("Failed to get symbol for %p. File: %s", p, info.dli_fname);
       return NULL;
     }
+  }
+  
+  interval getRange() {
+    return interval(_base, _limit);
   }
   
   basic_block* getBlock(void* p) {
@@ -130,11 +154,5 @@ public:
     return _name;
   }
 };
-
-string basic_block::toString() {
-  ostringstream ss;
-  ss << _f->getName() << " block " << _index;
-  return ss.str();
-}
 
 #endif
