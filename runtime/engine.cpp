@@ -1,9 +1,17 @@
 #include "engine.h"
 
+#include <dlfcn.h>
+#include <elf.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <papi.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include <map>
 #include <set>
@@ -19,9 +27,9 @@ using std::string;
 
 namespace engine {
   enum {
-    CycleSamplePeriod = 100000,
+    CycleSamplePeriod = 10000000,
     CycleSampleMask = 0x1,
-    InstructionSamplePeriod = 100000,
+    InstructionSamplePeriod = 1000,
     InstructionSampleMask = 0x2
   };
   
@@ -131,11 +139,145 @@ namespace engine {
     REQUIRE(PAPI_unregister_thread() == PAPI_OK, "Failed to unregister thread");
   }
   
+  // Process an ELF file with a known architecture. Caller should pass in types for
+  // either ELF32 or ELF64 files. Field names and processing code are the same for both.
+  template<bool Is64Bit, class ElfHeader, class SectionHeader, class Symbol>
+  void processElfFile(const char* filename, ElfHeader* header, void* loaded) {
+    // Get the first section header table entry
+    SectionHeader* sh_entry = (SectionHeader*)((uintptr_t)header + header->e_shoff);
+    
+    // Get size and count information for section headers
+    size_t sh_entry_size = header->e_shentsize;
+    size_t sh_count = header->e_shnum;
+    size_t shstr_index = header->e_shstrndx;
+    
+    // Handle large section header counts
+    if(sh_count == 0) {
+      sh_count = sh_entry->sh_size;
+    }
+    
+    // Handle large indices for the section name table index
+    if(shstr_index == SHN_XINDEX) {
+      shstr_index = sh_entry->sh_link;
+    }
+    
+    // Find the section section name table
+    SectionHeader* shstr_entry = (SectionHeader*)((uintptr_t)sh_entry + sh_entry_size * shstr_index);
+    REQUIRE(shstr_entry->sh_type == SHT_STRTAB, "Section name string table section is not a string table");
+    const char* shstr_table = (const char*)((uintptr_t)header + shstr_entry->sh_offset);
+    
+    // Find the string table section header
+    size_t sh_index = 0;
+    SectionHeader* sh_strtab = NULL;
+    while(sh_index < sh_count) {
+      if(sh_entry->sh_type == SHT_STRTAB) {
+        if(string(shstr_table + sh_entry->sh_name) == ".strtab") {
+          sh_strtab = sh_entry;
+        } else if(sh_strtab == NULL && string(shstr_table + sh_entry->sh_name) == ".dynstr") {
+          sh_strtab = sh_entry;
+        }
+      }
+      sh_index++;
+      sh_entry = (SectionHeader*)((uintptr_t)sh_entry + sh_entry_size);
+    }
+    REQUIRE(sh_strtab != NULL, "Couldn't find string table in %s", filename);
+    
+    const char* string_table = (const char*)((uintptr_t)header + sh_strtab->sh_offset);
+    
+    INFO("%s", filename);
+    sh_index = 0;
+    sh_entry = (SectionHeader*)((uintptr_t)header + header->e_shoff);
+    while(sh_index < sh_count) {
+      // Is this a symbol table?
+      if(sh_entry->sh_type == SHT_SYMTAB || sh_entry->sh_type == SHT_DYNSYM) {
+        INFO(" Found symbol table in section %s", shstr_table + sh_entry->sh_name);
+        
+        size_t symbol_size = sh_entry->sh_entsize;
+        size_t symbol_count = sh_entry->sh_size / symbol_size;
+        
+        Symbol* symbol = (Symbol*)((uintptr_t)header + sh_entry->sh_offset);
+        
+        size_t symbol_index = 0;
+        while(symbol_index < symbol_count) {
+          int type;
+          
+          if(Is64Bit)
+            type = ELF64_ST_TYPE(symbol->st_info);
+          else
+            type = ELF32_ST_TYPE(symbol->st_info);
+          
+          if(type == STT_FUNC && symbol->st_value != 0) {
+            INFO("  Function %s: %p - %p",
+              string_table + symbol->st_name, 
+              (void*)(uintptr_t)symbol->st_value, 
+              (void*)((uintptr_t)symbol->st_value + symbol->st_size));
+          }
+          
+          symbol_index++;
+          symbol = (Symbol*)((uintptr_t)symbol + symbol_size);
+        }
+      } else {
+        INFO(" Skipping section %s", shstr_table + sh_entry->sh_name);
+      }
+      
+      // Advance to the next entry
+      sh_index++;
+      sh_entry = (SectionHeader*)((uintptr_t)sh_entry + sh_entry_size);
+    }
+  }
+  
+  void readElfFile(const char* filename, void* loaded) {
+    // Open the loaded file from disk
+    int fd = open(filename, O_RDONLY);
+    REQUIRE(fd != -1, "Failed to open file %s", filename);
+    
+    // Get file size
+    struct stat sb;
+    REQUIRE(fstat(fd, &sb) != -1, "Failed to get size for file %s", filename);
+    
+    // Map the ELF file
+    void* base = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    REQUIRE(base != MAP_FAILED, "Failed to map file %s", filename);
+    
+    // Validate the ELF header
+    Elf64_Ehdr* header = (Elf64_Ehdr*)base;
+    if(header->e_ident[0] == 0x7f && header->e_ident[1] == 'E' &&
+       header->e_ident[2] == 'L' && header->e_ident[3] == 'F') {
+      if(header->e_ident[4] == ELFCLASS32) {
+        // Handle an ELF32 file
+        processElfFile<false, Elf32_Ehdr, Elf32_Shdr, Elf32_Sym>(filename, (Elf32_Ehdr*)header, loaded);
+      } else if(header->e_ident[4] == ELFCLASS64) {
+        // Handle an ELF64 file
+        processElfFile<true, Elf64_Ehdr, Elf64_Shdr, Elf64_Sym>(filename, header, loaded);
+      } else {
+        WARNING("Unsupported ELF file class %d", header->e_ident[4]);
+      }
+    } else {
+      WARNING("Not an elf file. Found magic bytes %#x %c%c%c",
+        header->e_ident[0], header->e_ident[1], header->e_ident[2], header->e_ident[3]);
+    }
+    
+    // Unmap and close
+    REQUIRE(munmap(base, sb.st_size) != -1, "Failed to unmap file %s", filename);
+    REQUIRE(close(fd) != -1, "Failed to close file %s", filename);
+  }
+  
   set<interval> _buildCodeMap() {
     set<interval> code;
     
+    Dl_info dlinfo;
+    
   	const PAPI_exe_info_t* info = PAPI_get_executable_info();
   	if(info) {
+      // Find the load address for the main executable file
+      dlinfo.dli_fbase = NULL;
+      dladdr(info->address_info.text_start, &dlinfo);
+      REQUIRE(dlinfo.dli_fbase != NULL, "Couldn't find base for file %s", info->fullname);
+      
+      // Process the ELF file for the main executable
+      readElfFile(info->fullname, dlinfo.dli_fbase);
+      
+      // Add the main file's executable memory to the code map
       code.insert(interval(info->address_info.text_start, info->address_info.text_end));
   	}
     
@@ -145,10 +287,23 @@ namespace engine {
         // Don't include PAPI or causal
         if(string(lib_info->map[i].name).find("libpapi") == string::npos &&
            string(lib_info->map[i].name).find("libcausal") == string::npos) {
+             
+          // Find the load address for this shared library
+          dlinfo.dli_fbase = NULL;
+          dladdr(lib_info->map[i].text_start, &dlinfo);
+          REQUIRE(dlinfo.dli_fbase != NULL, "Couldn't file base for file %s", lib_info->map[i].name);
+          
+          // Process the ELF file for this library
+          readElfFile(lib_info->map[i].name, dlinfo.dli_fbase);
+          
+          // Add this library's executable memory to the code map
           code.insert(interval(lib_info->map[i].text_start, lib_info->map[i].text_end));
         }
       }
     }
+    
+    INFO("All done!");
+    exit(0);
     
     return code;
   }
