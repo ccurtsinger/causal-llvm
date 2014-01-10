@@ -80,8 +80,8 @@ public:
       engine::initialize();
     
       // Create the profiler thread
-      REQUIRE(Real::pthread_create()(&_profiler_thread, NULL, startProfiler, NULL) == 0,
-        "Failed to create profiler thread");
+      //REQUIRE(Real::pthread_create()(&_profiler_thread, NULL, startProfiler, NULL) == 0,
+      //  "Failed to create profiler thread");
     
       // Add the main thread to the sampling engine
       engine::addThread();

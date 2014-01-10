@@ -34,8 +34,6 @@ namespace papi {
   }
   
   void startThread(size_t cycle_period, size_t inst_period, overflow_handler_t handler) {
-    static atomic<size_t> total_startup = ATOMIC_VAR_INIT(0);
-    size_t start = getTime();
     int rc;
     // Set up the PAPI event set
     _event_set = PAPI_NULL;
@@ -57,20 +55,14 @@ namespace papi {
     REQUIRE(rc == PAPI_OK, "Failed to set up instruction counter sampling: %s", PAPI_strerror(rc));
     
     PAPI_start(_event_set);
-    total_startup += getTime() - start;
-    INFO("Total thread startup time: %fs", (float)total_startup.load() / Time_s);
   }
   
   void stopThread() {
-    static atomic<size_t> total_shutdown = ATOMIC_VAR_INIT(0);
-    size_t start = getTime();
     long long result[2];
     REQUIRE(PAPI_stop(_event_set, result) == PAPI_OK, "Failed to stop PAPI");
     REQUIRE(PAPI_cleanup_eventset(_event_set) == PAPI_OK, "Failed to clean up event set");
     REQUIRE(PAPI_destroy_eventset(&_event_set) == PAPI_OK, "Failed to destroy event set");
     REQUIRE(PAPI_unregister_thread() == PAPI_OK, "Failed to unregister thread");
-    total_shutdown += getTime() - start;
-    INFO("Total thread shutdown time: %fs", (float)total_shutdown.load() / Time_s);
   }
 };
 
