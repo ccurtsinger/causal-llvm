@@ -4,7 +4,6 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <time.h>
 
 #include <new>
 
@@ -12,15 +11,7 @@
 #include "function.h"
 #include "log.h"
 #include "real.h"
-
-using namespace std;
-
-enum Time {
-  Time_ns = 1,
-  Time_us = 1000 * Time_ns,
-  Time_ms = 1000 * Time_us,
-  Time_s = 1000 * Time_ms
-};
+#include "util.h"
 
 struct Causal {
 private:
@@ -30,15 +21,6 @@ private:
 	Causal() : _initialized(false) {
     initialize();
 	}
-  
-  static size_t getTime() {
-    struct timespec ts;
-    if(clock_gettime(CLOCK_REALTIME, &ts)) {
-      perror("getTime():");
-      abort();
-    }
-    return ts.tv_nsec + ts.tv_sec * Time_s;
-  }
   
   static size_t wait(uint64_t nanos) {
     if(nanos == 0) return 0;
@@ -59,25 +41,22 @@ private:
     size_t total_samples = 0;
     
     while(true) {
-      cycle_max = 1024;
+      /*cycle_max = 1024;
       inst_max = 1024;
       engine::collectSamples(cycle_samples, &cycle_max, inst_samples, &inst_max);
       
       fprintf(stderr, "  Instruction samples:\n");
       for(size_t i=0; i<inst_max; i++) {
-        basic_block* b = engine::getBlock(inst_samples[i]);
-        if(b != NULL) {
-          b->sample();
-          if(b->getIndex() == 0) {
-            fprintf(stderr, "  %s\n", engine::getFunction(inst_samples[i])->getName().c_str());
-            fprintf(stderr, "    %s\n", b->toString().c_str());
-          }
+        function* f = engine::getFunction(inst_samples[i]);
+        if(f != NULL) {
+          int block = f->getBlock(inst_samples[i]);
+          fprintf(stderr, "  %s block %d (%p)\n", f->getName().c_str(), block, inst_samples[i]);
         }
       }
       
       total_samples += inst_max;
       
-      fprintf(stderr, "%lu total samples\n", total_samples);
+      fprintf(stderr, "%lu total samples\n", total_samples);*/
       
       wait(Time_s);
     }
@@ -99,8 +78,6 @@ public:
     if(__atomic_exchange_n(&_initialized, true, __ATOMIC_SEQ_CST) == false) {
       INFO("Initializing");
       engine::initialize();
-    
-      //_map = engine::buildMap();
     
       // Create the profiler thread
       REQUIRE(Real::pthread_create()(&_profiler_thread, NULL, startProfiler, NULL) == 0,

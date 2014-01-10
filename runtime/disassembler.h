@@ -6,6 +6,7 @@
 #include <udis86.h>
 
 #include "arch.h"
+#include "interval.h"
 #include "log.h"
 
 using std::string;
@@ -78,30 +79,27 @@ public:
 class disassembler {
 private:
 	ud_t _ud;
-  bool _initial;
   bool _done;
 	
 public:
   /// Initialize the libudis86 object and begin disassembly
-	disassembler(uintptr_t start) : _initial(true), _done(false) {
+	disassembler(uintptr_t start, uintptr_t end = std::numeric_limits<uintptr_t>::max()) : _done(false) {
 		ud_init(&_ud);
 		ud_set_syntax(&_ud, UD_SYN_INTEL);
 		_X86(ud_set_mode(&_ud, 32));
 		_X86_64(ud_set_mode(&_ud, 64));
-		ud_set_input_buffer(&_ud, (uint8_t*)start, std::numeric_limits<uintptr_t>::max() - start);
+		ud_set_input_buffer(&_ud, (uint8_t*)start, end - start);
 		ud_set_pc(&_ud, start);
 		// Disassemble the first instruction
 		next();
 	}
+  
+  disassembler(interval range) : disassembler(range.getBase(), range.getLimit()) {}
 
   /// Disassemble the next instruction
 	void next() {
-    if(!_initial && !fallsThrough()) {
-      _done = true;
-    } else {
-      _initial = false;
-		  REQUIRE(ud_disassemble(&_ud), "Unknown error in disassembly");
-    }
+    if(!_done)
+      _done = !ud_disassemble(&_ud);
 	}
   
   /// Check if disassembly has reached an unconditional branch or return

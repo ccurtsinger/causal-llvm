@@ -1,6 +1,8 @@
 #if !defined(CAUSAL_RUNTIME_FUNCTION_H)
 #define CAUSAL_RUNTIME_FUNCTION_H
 
+#include <atomic>
+#include <deque>
 #include <limits>
 #include <map>
 #include <set>
@@ -9,149 +11,173 @@
 
 #include <dlfcn.h>
 #include <stdint.h>
+#include <sys/mman.h>
 
 #include "disassembler.h"
+#include "heap.h"
 #include "interval.h"
 #include "log.h"
 
+using std::atomic_flag;
+using std::deque;
+using std::less;
 using std::map;
-using std::ostringstream;
+using std::pair;
 using std::set;
 using std::stack;
 
-class function;
-
-class basic_block {
-private:
-  interval _range;
-  function* _f;
-  size_t _index;
-  size_t _length;
-  size_t _samples;
-  
+class Function {
 public:
-  basic_block(function* f, size_t index, uintptr_t base, uintptr_t limit) : 
-      _f(f), _index(index), _samples(0), _range(base, limit) {
+  class BasicBlock {
+  private:
+    Function& _f;
+    size_t _index;
+    interval _range;
+    size_t _length;
+    atomic<size_t> _cycle_samples = ATOMIC_VAR_INIT(0);
+    atomic<size_t> _inst_samples = ATOMIC_VAR_INIT(0);
     
-    // Count instructions in the block, starting at 1 to include the first one
-    _length = 1;
-    // Count until we have reached the last instruction. There may be padding between blocks, 
-    // so disassembly must also stop if we reach an instruction that does not fall through.
-    for(disassembler inst = disassembler(base); !inst.done() && inst.limit() < limit; inst.next()) {
-      _length++;
+    BasicBlock() : BasicBlock(&Function::getNullFunction(), 0, interval(0, 0)) {}
+    
+  public:
+    BasicBlock(Function* f, size_t index, interval range) : _f(*f), _index(index), _range(range) {}
+    BasicBlock(const BasicBlock& other) : _f(other._f), _index(other._index), 
+        _range(other._range), _length(other._length) {
+      _cycle_samples.store(other._cycle_samples);
+      _inst_samples.store(other._inst_samples);
     }
-  }
-  
-  static std::pair<const interval, basic_block>
-  makeEntry(function* f, size_t index, uintptr_t base, uintptr_t limit) {
-    return std::pair<const interval, basic_block>(interval(base, limit), basic_block(f, index, base, limit));
-  }
-  
-  function& getFunction() {
-    return *_f;
-  }
-  
-  size_t getIndex() {
-    return _index;
-  }
-  
-  void sample() {
-    _samples++;
-  }
-  
-  string toString() {
-    ostringstream ss;
-    ss << "block " << _index << " [" << _length << " instruction(s), " << _samples << " samples]";
-    return ss.str();
-  }
-};
-
-class function {
-private:
-  string _name;
-  uintptr_t _base;
-  uintptr_t _limit;
-  map<interval, basic_block> _blocks;
-  
-  function(string name, uintptr_t base) : _name(name), _base(base), _limit(base) {
-    // Disassemble to find starting addresses of all basic blocks
-    set<uintptr_t> block_bases;
-    stack<uintptr_t> q;
-    q.push(base);
     
-    while(q.size() > 0) {
-      uintptr_t p = q.top();
-      q.pop();
+    ~BasicBlock() {
+      if(_cycle_samples > 0 || _inst_samples > 0) {
+        fprintf(stderr, "%s block %lu\n  %lu cycle samples\n  %lu instruction samples\n", 
+          _f.getName().c_str(), _index,
+          _cycle_samples.load(),
+          _inst_samples.load());
+      }
+    }
+    
+    static BasicBlock& getNullBlock() {
+      static BasicBlock _null_block;
+      return _null_block;
+    }
+    
+    size_t getIndex() {
+      return _index;
+    }
+    
+    void cycleSample() {
+      _cycle_samples++;
+    }
+    
+    void instructionSample() {
+      _inst_samples++;
+    }
+  };
+  
+private:
+  typedef map<interval, BasicBlock, less<interval>, 
+    STLAllocator<pair<const interval, BasicBlock>, CausalHeap>> block_map;
+  typedef set<uintptr_t, less<uintptr_t>,
+    STLAllocator<uintptr_t, CausalHeap>> uintptr_set;
+  typedef stack<uintptr_t,
+    deque<uintptr_t, STLAllocator<uintptr_t, CausalHeap>>> uintptr_stack;
+  
+  causal_string _name;
+  interval _range;
+  atomic_flag _lock = ATOMIC_FLAG_INIT;
+  bool _processed = false;
+  block_map _blocks;
+  
+  void findBlocks() {
+    if(_processed) return;
+    
+    while(_lock.test_and_set()) {
+      __asm__("pause");
+    }
+    
+    if(!_processed) {
+      // Disassemble to find starting addresses of all basic blocks
+      uintptr_set block_bases;
+      uintptr_stack q;
+      q.push(_range.getBase());
+    
+      while(q.size() > 0) {
+        uintptr_t p = q.top();
+        q.pop();
       
-      // Skip null or already-seen pointers
-      if(p == 0 || block_bases.find(p) != block_bases.end())
-        continue;
+        // Skip null or already-seen pointers
+        if(p == 0 || block_bases.find(p) != block_bases.end())
+          continue;
       
-      // This is a new block starting address
-      block_bases.insert(p);
+        // This is a new block starting address
+        block_bases.insert(p);
       
-      // Disassemble the new basic block
-      for(disassembler inst = disassembler(p); !inst.done(); inst.next()) {
-        if(inst.limit() > _limit)
-          _limit = inst.limit();
-        
-        if(inst.branches()) {
-          branch_target target = inst.target();
-          if(target.dynamic()) {
-            WARNING("Unhandled dynamic branch target in instruction %s", inst.toString());
-          } else {
-            q.push(target.value());
+        // Disassemble the new basic block
+        for(disassembler inst = disassembler(p, _range.getLimit()); !inst.done() && inst.fallsThrough(); inst.next()) {
+          if(inst.branches()) {
+            branch_target target = inst.target();
+            if(target.dynamic()) {
+              WARNING("Unhandled dynamic branch target in instruction %s", inst.toString());
+            } else {
+              uintptr_t t = target.value();
+              if(_range.contains(t))
+                q.push(t);
+            }
           }
         }
       }
-    }
     
-    // Create basic block objects
-    size_t index = 0;
-    uintptr_t prev_base = 0;
-    for(set<uintptr_t>::iterator iter = block_bases.begin(); iter != block_bases.end(); iter++) {
-      if(prev_base != 0) {
-        _blocks.insert(basic_block::makeEntry(this, index, prev_base, *iter));
-        index++;
+      // Create basic block objects
+      size_t index = 0;
+      uintptr_t prev_base = 0;
+      for(uintptr_set::iterator iter = block_bases.begin(); iter != block_bases.end(); iter++) {
+        if(prev_base != 0) {
+          interval i(prev_base, *iter);
+          _blocks.insert(pair<const interval, BasicBlock>(i, BasicBlock(this, index, i)));
+          index++;
+        }
+        prev_base = *iter;
       }
-      prev_base = *iter;
+    
+      // The last block ends at the function's limit address
+      interval i(prev_base, _range.getLimit());
+      _blocks.insert(pair<const interval, BasicBlock>(i, BasicBlock(this, index, i)));
+      
+      _processed = true;
     }
     
-    // The last block ends at the function's limit address
-    _blocks.insert(basic_block::makeEntry(this, index, prev_base, _limit));
+    _lock.clear();
   }
+  
+  Function() : Function("<null>", interval(0, 0)) {}
   
 public:
-  static function* get(void* p) {
-    Dl_info info;
+  Function(causal_string name, interval range) : _name(name), _range(range) {}
+  Function(const Function& other) : _name(other._name), _range(other._range), _processed(false) {}
+
+  BasicBlock& getBlock(uintptr_t p) {
+    // Ensure this function has been disassembled to identify basic blocks
+    findBlocks();
     
-    if(dladdr(p, &info) == 0) {
-      // No symbol found. Just give up
-      return NULL;
-    } else if(info.dli_saddr != NULL) {
-      // Return a new function object
-      return new function(info.dli_sname, (uintptr_t)info.dli_saddr);
+    block_map::iterator iter = _blocks.find(p);
+    if(iter == _blocks.end()) {
+      return BasicBlock::getNullBlock();
     } else {
-      INFO("Failed to get symbol for %p. File: %s", p, info.dli_fname);
-      return NULL;
+      return iter->second;
     }
   }
   
-  interval getRange() {
-    return interval(_base, _limit);
+  static Function& getNullFunction() {
+    static Function _null_Function;
+    return _null_Function;
   }
-  
-  basic_block* getBlock(void* p) {
-    // Use interval's point constructor to search for blocks containing p
-    map<interval, basic_block>::iterator iter = _blocks.find(p);
-    if(iter == _blocks.end())
-      return NULL;
-    else
-      return &iter->second;
-  }
-  
-  const string& getName() {
+
+  const causal_string& getName() {
     return _name;
+  }
+  
+  const interval& getRange() {
+    return _range;
   }
 };
 

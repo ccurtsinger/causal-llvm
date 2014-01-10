@@ -115,3 +115,8 @@ $(RECURSIVE_TARGETS)::
 	  echo "$(INDENT)[$@] Entering $$dir"; \
 	  $(MAKE) -C $$dir $@ DEBUG=$(DEBUG); \
 	done
+
+$(ROOT)/Heap-Layers:
+	@ echo $(INDENT)[git] Checking out Heap-Layers
+	@rm -rf $(ROOT)/Heap-Layers
+	@git clone https://github.com/emeryberger/Heap-Layers.git $(ROOT)/Heap-Layers

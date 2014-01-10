@@ -8,8 +8,8 @@
 #include <unistd.h>
 
 #define MAKE_WRAPPER(name, handle) \
-  static typeof(::name)* name() { \
-    static typeof(::name)* _fn = (typeof(::name)*)dlsym(handle, #name); \
+  static decltype(::name)* name() { \
+    static decltype(::name)* _fn = (decltype(::name)*)dlsym(handle, #name); \
     return _fn; \
   }
 

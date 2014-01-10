@@ -10,15 +10,32 @@ private:
   
 public:
   interval(uintptr_t base, uintptr_t limit) : _base(base), _limit(limit) {}
-  interval(void* base, void* limit) : _base((uintptr_t)base), _limit((uintptr_t)limit) {}
   
-  // Unit intervals:
+  // Unit interval constructor
   interval(uintptr_t p) : _base(p), _limit(p+1) {}
-  interval(void* p) : _base((uintptr_t)p), _limit((uintptr_t)p + 1) {}
   
+  // Shift
+  interval operator+(uintptr_t x) {
+    return interval(_base + x, _limit + x);
+  }
+  
+  void operator+=(uintptr_t x) {
+    _base += x;
+    _limit += x;
+  }
+  
+  // Comparison function that treats overlapping intervals as equal
   bool operator<(const interval& b) const {
     return _limit <= b._base;
   }
+  
+  bool contains(uintptr_t x) {
+    return _base <= x && x < _limit;
+  }
+  
+  // Accessors
+  uintptr_t getBase() const { return _base; }
+  uintptr_t getLimit() const { return _limit; }
 };
 
 #endif
