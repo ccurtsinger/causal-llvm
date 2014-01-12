@@ -3,32 +3,52 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <map>
 #include <new>
 #include <thread>
 
 #include "basicblock.h"
-#include "engine.h"
+#include "elf.h"
 #include "function.h"
 #include "log.h"
+#include "papi.h"
 #include "real.h"
 #include "samples.h"
 #include "util.h"
+
+enum {
+  CycleSamplePeriod = 10000000,
+  CycleSampleMask = 0x1,
+  InstructionSamplePeriod = 5000000,
+  InstructionSampleMask = 0x2
+};
 
 struct Causal {
 private:
   bool _initialized;
   pthread_t _profiler_thread;
+  map<interval, Function> _functions;
   
 	Causal() : _initialized(false) {
     initialize();
 	}
   
+  Function& getFunction(uintptr_t p) {
+    map<interval, Function>::iterator iter = _functions.find(p);
+    if(iter == _functions.end())
+      return Function::getNullFunction();
+    else
+      return iter->second;
+  }
+  
   void profiler() {
     while(true) {
+      INFO("HERE");
       SampleChunk* chunk = SampleChunk::take();
       
       for(Sample& s : chunk->getSamples()) {
-        Function& f = engine::getFunction(s.address);
+        Function& f = getFunction(s.address);
+        INFO("Found function %s", f.getName().c_str());
         BasicBlock& b = f.getBlock(s.address);
         if(s.type == SampleType::Cycle)
           b.cycleSample();
@@ -38,9 +58,51 @@ private:
     }
   }
   
+  static void overflowHandler(int event_set, void* address, long long vec, void* context) {
+    if(vec & CycleSampleMask) {
+      SampleChunk::getLocal()->add(SampleType::Cycle, (uintptr_t)address);
+    }
+
+    if(vec & InstructionSampleMask) {
+      SampleChunk::getLocal()->add(SampleType::Instruction, (uintptr_t)address);
+    }
+  }
+  
   static void* startProfiler(void* arg) {
     getInstance().profiler();
     return NULL;
+  }
+  
+  void findFunctions() {
+    for(const auto& file : papi::getFiles()) {
+      const string& filename = file.first;
+      const interval& file_range = file.second;
+      
+      // Skip libpapi and libcausal
+      if(filename.find("libcausal") != string::npos ||
+         filename.find("libpapi") != string::npos) {
+        continue;
+      }
+      
+      ELFFile* elf = ELFFile::open(filename);
+      
+      if(elf == NULL) {
+        WARNING("Skipping file %s", filename.c_str());
+      } else {
+        for(const auto& fn : elf->getFunctions()) {
+          const string& fn_name = fn.first;
+          interval fn_range = fn.second;
+          
+          // Dynamic libraries need to be shifted to their load address
+          if(elf->isDynamic())
+            fn_range += file_range.getBase();
+          
+          _functions.emplace(fn_range, Function(fn_name, fn_range));
+        }
+        
+        delete elf;
+      }
+    }
   }
   
 public:
@@ -53,21 +115,25 @@ public:
   void initialize() {
     if(__atomic_exchange_n(&_initialized, true, __ATOMIC_SEQ_CST) == false) {
       INFO("Initializing");
-      engine::initialize();
+      
+      // Set up PAPI
+      papi::initialize();
+      
+      // Build a map of functions
+      findFunctions();
     
       // Create the profiler thread
       REQUIRE(Real::pthread_create()(&_profiler_thread, NULL, startProfiler, NULL) == 0,
         "Failed to create profiler thread");
-    
-      // Add the main thread to the sampling engine
-      engine::addThread();
+        
+      // Initialize the main thread
+      initializeThread();
     }
   }
   
   void reinitialize() {
     INFO("Reinitializing");
     __atomic_store_n(&_initialized, false, __ATOMIC_SEQ_CST);
-    engine::initialize();
   }
   
   void shutdown() {
@@ -77,7 +143,12 @@ public:
   }
   
   void initializeThread() {
-    engine::addThread();
+    papi::startThread(CycleSamplePeriod, InstructionSamplePeriod, overflowHandler);
+  }
+  
+  void shutdownThread() {
+    papi::stopThread();
+    SampleChunk::flushLocal();
   }
 };
 

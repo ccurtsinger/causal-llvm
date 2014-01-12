@@ -51,9 +51,9 @@ extern "C" void* thread_wrapper(void* p) {
   ThreadInit* init = (ThreadInit*)p;
   ThreadInit local_init = *init;
   delete init;
-  engine::addThread();
+  Causal::getInstance().initializeThread();
   void* result = local_init.run();
-  engine::removeThread();
+  Causal::getInstance().shutdownThread();
   return result;
 }
 
@@ -80,7 +80,7 @@ extern "C" {
 	}
   
   void pthread_exit(void* arg) {
-    engine::removeThread();
+    Causal::getInstance().shutdownThread();
     Real::pthread_exit()(arg);
   }
 
