@@ -18,12 +18,10 @@
 
 enum {
   CycleSamplePeriod = 10000000,
-  CycleSampleMask = 0x1,
-  InstructionSamplePeriod = 5000000,
-  InstructionSampleMask = 0x2
+  InstructionSamplePeriod = 5000000
 };
 
-struct Causal {
+class Causal {
 private:
   bool _initialized;
   pthread_t _profiler_thread;
@@ -43,28 +41,17 @@ private:
   
   void profiler() {
     while(true) {
-      INFO("HERE");
-      SampleChunk* chunk = SampleChunk::take();
+      SampleBlock* block = sampler::getNextBlock();
       
-      for(Sample& s : chunk->getSamples()) {
+      for(Sample& s : block->getSamples()) {
         Function& f = getFunction(s.address);
-        INFO("Found function %s", f.getName().c_str());
         BasicBlock& b = f.getBlock(s.address);
+        
         if(s.type == SampleType::Cycle)
           b.cycleSample();
         else
           b.instructionSample();
       }
-    }
-  }
-  
-  static void overflowHandler(int event_set, void* address, long long vec, void* context) {
-    if(vec & CycleSampleMask) {
-      SampleChunk::getLocal()->add(SampleType::Cycle, (uintptr_t)address);
-    }
-
-    if(vec & InstructionSampleMask) {
-      SampleChunk::getLocal()->add(SampleType::Instruction, (uintptr_t)address);
     }
   }
   
@@ -143,12 +130,11 @@ public:
   }
   
   void initializeThread() {
-    papi::startThread(CycleSamplePeriod, InstructionSamplePeriod, overflowHandler);
+    sampler::initializeThread(CycleSamplePeriod, InstructionSamplePeriod);
   }
   
   void shutdownThread() {
-    papi::stopThread();
-    SampleChunk::flushLocal();
+    sampler::shutdownThread();
   }
 };
 

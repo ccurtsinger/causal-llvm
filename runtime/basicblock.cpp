@@ -12,7 +12,7 @@ BasicBlock::BasicBlock() :
 BasicBlock::BasicBlock(Function* f, size_t index, interval range) : 
   _f(*f), _index(index), _range(range) {}
 
-BasicBlock::~BasicBlock() {
+void BasicBlock::dumpInfo() {
   if(_cycle_samples > 0 || _inst_samples > 0) {
     fprintf(stderr, "%s block %lu\n  %lu cycle samples\n  %lu instruction samples\n", 
       _f.getName().c_str(), _index,

@@ -5,62 +5,101 @@
 #include <mutex>
 #include <new>
 
+#include "papi.h"
+
 using std::condition_variable;
 using std::list;
 using std::mutex;
 using std::unique_lock;
 
+typedef list<SampleBlock*, STLAllocator<SampleBlock*, CausalHeap>> GlobalBlockList;
+
+/// Mutex to protect the global block list
 mutex mtx;
+/// Condition variable used to block on the global block list
 condition_variable cv;
 
-typedef list<SampleChunk*, STLAllocator<SampleChunk*, CausalHeap>> global_chunks_t;
-global_chunks_t& getGlobalChunks() {
-  static char buf[sizeof(global_chunks_t)];
-  static global_chunks_t* global_chunks = new(buf) global_chunks_t();
-  return *global_chunks;
+/// Get a mutable reference to the global block list. Required to ensure proper initialization order.
+GlobalBlockList& getGlobalBlocks() {
+  static char buf[sizeof(GlobalBlockList)];
+  static GlobalBlockList* global_blocks = new(buf) GlobalBlockList();
+  return *global_blocks;
 }
 
+/// Magic variable used to ensure the local block pointer is initialized
 __thread int local_magic;
-__thread SampleChunk* local_chunk;
+/// The thread-local sample block pointer
+__thread SampleBlock* local_block;
 
-void submitLocalChunk() {
-  // Finalize the current chunk (sets the end time)
-  local_chunk->finalize();
-  // Lock the global chunks list
+/// Push the current thread's sample block to the global list
+void submitLocalBlock() {
+  // Finish the current block (sets the end time)
+  local_block->done();
+  // Lock the global blocks list
   unique_lock<mutex> l(mtx);
-  // Add the local chunk to the global list
-  getGlobalChunks().push_back(local_chunk);
+  // Add the local block to the global list
+  getGlobalBlocks().push_back(local_block);
   // If the list was previously empty, notify anyone waiting on the list
-  if(getGlobalChunks().size() == 1) cv.notify_all();
+  if(getGlobalBlocks().size() == 1) cv.notify_all();
 }
 
-SampleChunk* SampleChunk::getLocal() {
-  if(local_magic != 0xDEADBEEF || local_chunk == NULL) {
-    local_magic = 0xDEADBEEF;
-    local_chunk = new SampleChunk();
-    
-  } else if(local_chunk->isFull()) {
-    submitLocalChunk();
-    local_chunk = new SampleChunk();
+/// Get a usable sample block for the current thread
+SampleBlock* getLocalBlock() {
+  if(local_magic != 0xD00FCA75 || local_block == NULL) {
+    local_magic = 0xD00FCA75;
+    local_block = new SampleBlock();
+  } else if(local_block->isFull()) {
+    submitLocalBlock();
+    local_block = new SampleBlock();
   }
-  
-  return local_chunk;
+  return local_block;
 }
 
-void SampleChunk::flushLocal() {
-  if(local_magic == 0xDEADBEEF && local_chunk != NULL) {
-    submitLocalChunk();
-    local_chunk = NULL;
+/// Push the current block to the global list if it exists
+void flushLocalBlock() {
+  if(local_magic == 0xD00FCA75 && local_block != NULL) {
+    submitLocalBlock();
+    local_block = new SampleBlock();
   }
 }
 
-SampleChunk* SampleChunk::take() {
-  // Lock the global chunks list
-  unique_lock<mutex> l(mtx);
-  // Wait while the list is empty
-  while(getGlobalChunks().size() == 0) { cv.wait(l); }
-  // Take the first chunk off the list
-  SampleChunk* result = getGlobalChunks().front();
-  getGlobalChunks().pop_front();
-  return result;
+enum {
+  CycleSampleMask = 0x1,
+  InstructionSampleMask = 0x2
+};
+
+/// Signal handler for PAPI's instruction and cycle sampling
+static void overflowHandler(int event_set, void* address, long long vec, void* context) {
+  if(vec & CycleSampleMask) {
+    getLocalBlock()->add(SampleType::Cycle, (uintptr_t)address);
+  }
+
+  if(vec & InstructionSampleMask) {
+    getLocalBlock()->add(SampleType::Instruction, (uintptr_t)address);
+  }
+}
+
+// The public API
+namespace sampler {
+  SampleBlock* getNextBlock() {
+    // Lock the global blocks list
+    unique_lock<mutex> l(mtx);
+    // Wait while the list is empty
+    while(getGlobalBlocks().size() == 0) { cv.wait(l); }
+    // Take the first block off the list
+    SampleBlock* result = getGlobalBlocks().front();
+    getGlobalBlocks().pop_front();
+    return result;
+  }
+
+  /// Start sampling in the current thread
+  void initializeThread(size_t cycle_period, size_t inst_period) {
+    papi::startThread(cycle_period, inst_period, overflowHandler);
+  }
+
+  /// Finish sampling in the current thread
+  void shutdownThread() {
+    papi::stopThread();
+    flushLocalBlock();
+  }
 }

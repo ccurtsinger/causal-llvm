@@ -22,8 +22,8 @@ public:
   /// Track a basic block in a given function
   BasicBlock(Function* f, size_t index, interval range);
   
-  /// Output profiling data when destroyed
-  ~BasicBlock();
+  /// Output profiling data
+  void dumpInfo();
   
   /// Get a basic block object for unidentified samples
   static BasicBlock& getNullBlock() {
