@@ -1,4 +1,4 @@
-#include "samples.h"
+#include "sampler.h"
 
 #include <condition_variable>
 #include <list>

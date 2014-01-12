@@ -13,7 +13,7 @@
 #include "log.h"
 #include "papi.h"
 #include "real.h"
-#include "samples.h"
+#include "sampler.h"
 #include "util.h"
 
 enum {
