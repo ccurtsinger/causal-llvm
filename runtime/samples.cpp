@@ -92,12 +92,10 @@ namespace sampler {
     return result;
   }
 
-  /// Start sampling in the current thread
   void initializeThread(size_t cycle_period, size_t inst_period) {
     papi::startThread(cycle_period, inst_period, overflowHandler);
   }
 
-  /// Finish sampling in the current thread
   void shutdownThread() {
     papi::stopThread();
     flushLocalBlock();

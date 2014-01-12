@@ -10,7 +10,7 @@ using HL::LockedHeap;
 using HL::MmapHeap;
 using HL::PosixLockType;
 
-typedef SizeHeap<FreelistHeap<BumpAlloc<0x200000, PrivateMmapHeap>>> SourceHeap;
+typedef SizeHeap<LockedHeap<PosixLockType, FreelistHeap<BumpAlloc<0x200000, PrivateMmapHeap>>>> SourceHeap;
 typedef KingsleyHeap<SourceHeap, MmapHeap> CausalHeap;
 
 CausalHeap& getPrivateHeap();

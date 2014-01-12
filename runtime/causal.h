@@ -52,6 +52,8 @@ private:
         else
           b.instructionSample();
       }
+      
+      delete block;
     }
   }
   
