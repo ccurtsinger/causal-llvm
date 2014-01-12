@@ -1,6 +1,9 @@
 #include <dlfcn.h>
 
+#include <new>
+
 #include "causal.h"
+#include "heap.h"
 #include "real.h"
 
 #include "../include/causal.h"
@@ -11,6 +14,12 @@ __attribute__((constructor)) void ctor() {
 
 __attribute__((destructor)) void dtor() {
 	Causal::getInstance().shutdown();
+}
+
+CausalHeap& getPrivateHeap() {
+  static char buf[sizeof(CausalHeap)];
+  static CausalHeap* theHeap = new(buf) CausalHeap();
+  return *theHeap;
 }
 
 extern "C" {

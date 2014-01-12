@@ -1,28 +1,20 @@
 #include "engine.h"
 
 #include <dlfcn.h>
-#include <elf.h>
-#include <errno.h>
-#include <fcntl.h>
 #include <papi.h>
-#include <pthread.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
 
+#include <cstdio>
+#include <cstdlib>
 #include <map>
 #include <set>
 #include <string>
 
-#include "disassembler.h"
 #include "elf.h"
 #include "function.h"
 #include "interval.h"
 #include "log.h"
 #include "papi.h"
+#include "samples.h"
 #include "util.h"
 
 using std::pair;
@@ -39,37 +31,33 @@ namespace engine {
   map<interval, Function> _buildFunctionMap() {
     map<interval, Function> functions;
     
-    Dl_info dlinfo;
-  	const PAPI_exe_info_t* info = PAPI_get_executable_info();
-  	if(info) {
-      // Find the load address for the main executable file
-      dlinfo.dli_fbase = NULL;
-      dladdr(info->address_info.text_start, &dlinfo);
-      REQUIRE(dlinfo.dli_fbase != NULL, "Couldn't find base for file %s", info->fullname);
+    for(const auto& file : papi::getFiles()) {
+      const string& filename = file.first;
+      const interval& file_range = file.second;
       
-      // Process the ELF file for the main executable
-      for(pair<const interval, string>& fn : getFunctions(info->fullname, dlinfo.dli_fbase)) {
-        functions.emplace(fn.first, Function(fn.second.c_str(), fn.first));
+      // Skip libpapi and libcausal
+      if(filename.find("libcausal") != string::npos ||
+         filename.find("libpapi") != string::npos) {
+        continue;
       }
-  	}
-    
-    const PAPI_shlib_info_t* lib_info = PAPI_get_shared_lib_info();
-    if(lib_info) {
-      for(int i=0; i<lib_info->count; i++) {
-        // Don't include PAPI or causal
-        if(string(lib_info->map[i].name).find("libpapi") == string::npos &&
-           string(lib_info->map[i].name).find("libcausal") == string::npos) {
-             
-          // Find the load address for this shared library
-          dlinfo.dli_fbase = NULL;
-          dladdr(lib_info->map[i].text_start, &dlinfo);
-          REQUIRE(dlinfo.dli_fbase != NULL, "Couldn't file base for file %s", lib_info->map[i].name);
+      
+      ELFFile* elf = ELFFile::open(filename);
+      
+      if(elf == NULL) {
+        WARNING("Skipping file %s", filename.c_str());
+      } else {
+        for(const auto& fn : elf->getFunctions()) {
+          const string& fn_name = fn.first;
+          interval fn_range = fn.second;
           
-          // Process the ELF file for this library
-          for(pair<const interval, string>& fn : getFunctions(lib_info->map[i].name, dlinfo.dli_fbase)) {
-            functions.emplace(fn.first, Function(fn.second.c_str(), fn.first));
-          }
+          // Dynamic libraries need to be shifted to their load address
+          if(elf->isDynamic())
+            fn_range += file_range.getBase();
+          
+          functions.emplace(fn_range, Function(fn_name, fn_range));
         }
+        
+        delete elf;
       }
     }
     
@@ -89,15 +77,12 @@ namespace engine {
   }
   
   void overflowHandler(int event_set, void* address, long long vec, void* context) {
-    Function& f = getFunction((uintptr_t)address);
-    Function::BasicBlock& b = f.getBlock((uintptr_t)address);
-    
     if(vec & CycleSampleMask) {
-      b.cycleSample();
+      SampleChunk::getLocal()->add(SampleType::Cycle, (uintptr_t)address);
     }
 
     if(vec & InstructionSampleMask) {
-      b.instructionSample();
+      SampleChunk::getLocal()->add(SampleType::Instruction, (uintptr_t)address);
     }
   }
 
@@ -112,5 +97,6 @@ namespace engine {
   
   void removeThread() {
     papi::stopThread();
+    SampleChunk::flushLocal();
   }
 }

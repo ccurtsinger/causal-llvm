@@ -3,7 +3,11 @@
 
 #include <papi.h>
 
+#include <map>
+
+#include "interval.h"
 #include "log.h"
+#include "util.h"
 
 namespace papi {
   typedef void (*overflow_handler_t)(int, void*, long long, void*);
@@ -64,6 +68,24 @@ namespace papi {
     REQUIRE(PAPI_destroy_eventset(&_event_set) == PAPI_OK, "Failed to destroy event set");
     REQUIRE(PAPI_unregister_thread() == PAPI_OK, "Failed to unregister thread");
   }
-};
+  
+  std::map<string, interval> getFiles() {
+    std::map<string, interval> files;
+    
+  	const PAPI_exe_info_t* info = PAPI_get_executable_info();
+  	if(info) {
+      files[info->fullname] = interval(info->address_info.text_start, info->address_info.text_end);
+  	}
+    
+    const PAPI_shlib_info_t* lib_info = PAPI_get_shared_lib_info();
+    if(lib_info) {
+      for(const PAPI_address_map_t& lib : wrap(lib_info->map, lib_info->count)) {
+        files[lib.name] = interval(lib.text_start, lib.text_end);
+      }
+    }
+    
+    return files;
+  }
+}
 
 #endif

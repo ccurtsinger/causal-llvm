@@ -19,6 +19,16 @@ static size_t getTime() {
   return ts.tv_nsec + ts.tv_sec * Time_s;
 }
 
+static size_t wait(uint64_t nanos) {
+  if(nanos == 0) return 0;
+  size_t start_time = getTime();
+  struct timespec ts;
+  ts.tv_nsec = nanos % Time_s;
+  ts.tv_sec = (nanos - ts.tv_nsec) / Time_s;
+  while(clock_nanosleep(CLOCK_REALTIME, 0, &ts, &ts)) {}
+  return getTime() - start_time;
+}
+
 template<class T> class wrapped_array {
 private:
   T* _base;

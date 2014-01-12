@@ -1,9 +1,9 @@
 #if !defined(CAUSAL_RUNTIME_DISASSEMBLER_H)
 #define CAUSAL_RUNTIME_DISASSEMBLER_H
 
-#include <string>
-
 #include <udis86.h>
+
+#include <limits>
 
 #include "arch.h"
 #include "interval.h"
