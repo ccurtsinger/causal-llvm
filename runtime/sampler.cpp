@@ -1,23 +1,19 @@
 #include "sampler.h"
 
-#include <condition_variable>
+#include <pthread.h>
 #include <list>
-#include <mutex>
 #include <new>
 
 #include "papi.h"
 
-using std::condition_variable;
 using std::list;
-using std::mutex;
-using std::unique_lock;
 
 typedef list<SampleBlock*, STLAllocator<SampleBlock*, CausalHeap>> GlobalBlockList;
 
 /// Mutex to protect the global block list
-mutex mtx;
+pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
 /// Condition variable used to block on the global block list
-condition_variable cv;
+pthread_cond_t cv = PTHREAD_COND_INITIALIZER;
 
 /// Get a mutable reference to the global block list. Required to ensure proper initialization order.
 GlobalBlockList& getGlobalBlocks() {
@@ -36,11 +32,13 @@ void submitLocalBlock() {
   // Finish the current block (sets the end time)
   local_block->done();
   // Lock the global blocks list
-  unique_lock<mutex> l(mtx);
+  pthread_mutex_lock(&mtx);
   // Add the local block to the global list
   getGlobalBlocks().push_back(local_block);
   // If the list was previously empty, notify anyone waiting on the list
-  if(getGlobalBlocks().size() == 1) cv.notify_all();
+  if(getGlobalBlocks().size() == 1) pthread_cond_signal(&cv);
+  // Unlock the global blocks list
+  pthread_mutex_unlock(&mtx);
 }
 
 /// Get a usable sample block for the current thread
@@ -83,12 +81,15 @@ static void overflowHandler(int event_set, void* address, long long vec, void* c
 namespace sampler {
   SampleBlock* getNextBlock() {
     // Lock the global blocks list
-    unique_lock<mutex> l(mtx);
+    pthread_mutex_lock(&mtx);
     // Wait while the list is empty
-    while(getGlobalBlocks().size() == 0) { cv.wait(l); }
+    while(getGlobalBlocks().size() == 0) {
+      pthread_cond_wait(&cv, &mtx);
+    }
     // Take the first block off the list
     SampleBlock* result = getGlobalBlocks().front();
     getGlobalBlocks().pop_front();
+    pthread_mutex_unlock(&mtx);
     return result;
   }
 
