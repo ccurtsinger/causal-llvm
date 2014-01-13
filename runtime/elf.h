@@ -60,8 +60,8 @@ public:
     return _header->e_type == ET_DYN;
   }
   
-  std::map<string, interval> getFunctions() const {
-    std::map<string, interval> functions;
+  std::map<std::string, interval> getFunctions() const {
+    std::map<std::string, interval> functions;
     
     ELFSectionHeader* sections = getData<ELFSectionHeader>(_header->e_shoff);
     REQUIRE(_header->e_shentsize == sizeof(ELFSectionHeader), 
@@ -100,7 +100,7 @@ public:
     return functions;
   }
   
-  static ELFFile* open(string filename) {
+  static ELFFile* open(std::string filename) {
     // Open the loaded file from disk
     int fd = ::open(filename.c_str(), O_RDONLY);
     if(fd == -1) {

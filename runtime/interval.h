@@ -21,7 +21,7 @@ public:
   interval() : interval(nullptr, nullptr) {}
   
   /// Shift
-  interval operator+(uintptr_t x) {
+  interval operator+(uintptr_t x) const {
     return interval(_base + x, _limit + x);
   }
   
@@ -37,7 +37,7 @@ public:
   }
   
   /// Check if an interval contains a point
-  bool contains(uintptr_t x) {
+  bool contains(uintptr_t x) const {
     return _base <= x && x < _limit;
   }
   

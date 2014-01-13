@@ -12,7 +12,7 @@ using namespace std;
 
 enum {
 	WorkerCount = 2,
-	WorkItemCount = 3000,
+	WorkItemCount = 100000000,
 	WeightA = 3,
 	WeightB = 2,
 	WeightC = 1
@@ -50,21 +50,21 @@ void work_item_A() {
 	ts.tv_sec = 0;
 	ts.tv_nsec = 1000 * 1000;
 	//ts.tv_nsec = 800000; // Subtracted 200000ns
-	while(nanosleep(&ts, &ts) != 0) {}
+	//while(nanosleep(&ts, &ts) != 0) {}
 }
 
 void work_item_B() {
 	struct timespec ts;
 	ts.tv_sec = 0;
 	ts.tv_nsec = 1000 * 1000;
-	while(nanosleep(&ts, &ts) != 0) {}
+	//while(nanosleep(&ts, &ts) != 0) {}
 }
 
 void work_item_C() {
 	struct timespec ts;
 	ts.tv_sec = 0;
 	ts.tv_nsec = 1000 * 1000;
-	while(nanosleep(&ts, &ts) != 0) {}
+	//while(nanosleep(&ts, &ts) != 0) {}
 }
 
 void fill_work_queue() {
