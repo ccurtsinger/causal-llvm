@@ -12,6 +12,8 @@ using std::string;
 
 namespace papi {
   __thread int _event_set;
+  int cyc_event;
+  int inst_event;
   
   void initialize() {
     int rc;
@@ -25,15 +27,18 @@ namespace papi {
     REQUIRE(rc == PAPI_OK, "Failed initialize PAPI thread support: %s", PAPI_strerror(rc));
     
     // Enable counters at kernel or hypervisor domain:
-    // rc = PAPI_set_domain(PAPI_DOM_ALL);
-    // REQUIRE(rc == PAPI_OK, "Failed to set PAPI domain: %s", PAPI_strerror(rc));
-  
-    // Verify that the instruction and cycle events are available
-    rc = PAPI_query_event(PAPI_TOT_CYC);
-    REQUIRE(rc == PAPI_OK, "Hardware cycle counter is not available: %s", PAPI_strerror(rc));
-    rc = PAPI_query_event(PAPI_TOT_INS);
-    REQUIRE(rc == PAPI_OK, "Hardware instruction counter is not available: %s", PAPI_strerror(rc));
-      
+    //rc = PAPI_set_domain(PAPI_DOM_ALL);
+    //REQUIRE(rc == PAPI_OK, "Failed to set PAPI domain: %s", PAPI_strerror(rc));
+    
+    rc = PAPI_event_name_to_code((char*)"PERF_COUNT_HW_CPU_CYCLES", &cyc_event);
+    REQUIRE(rc == PAPI_OK, "Failed to find cycle count event: %s", PAPI_strerror(rc));
+    
+    rc = PAPI_event_name_to_code((char*)"INST_RETIRED:PREC_DIST", &inst_event);
+    if(rc != PAPI_OK) {
+      rc = PAPI_event_name_to_code((char*)"RETIRED_INSTRUCTIONS", &inst_event);
+      REQUIRE(rc == PAPI_OK, "Failed to find instruction counter event: %s", PAPI_strerror(rc));
+    }
+    
     INFO("PAPI Initialized");
   }
   
@@ -44,18 +49,21 @@ namespace papi {
     rc = PAPI_create_eventset(&_event_set);
     REQUIRE(rc == PAPI_OK, "Failed to create PAPI event set: %s", PAPI_strerror(rc));
   
+    rc = PAPI_assign_eventset_component(_event_set, 0);
+    REQUIRE(rc == PAPI_OK, "Failed to bind PAPI event set to CPU component: %s", PAPI_strerror(rc));
+  
     // Add cycle and instruction counting events
-    rc = PAPI_add_event(_event_set, PAPI_TOT_CYC);
+    rc = PAPI_add_event(_event_set, cyc_event);
     REQUIRE(rc == PAPI_OK, "Failed to add cycle counter event: %s", PAPI_strerror(rc));
-    rc = PAPI_add_event(_event_set, PAPI_TOT_INS);
+    rc = PAPI_add_event(_event_set, inst_event);
     REQUIRE(rc == PAPI_OK, "Failed to add instruction counter event: %s", PAPI_strerror(rc));
   
     // Set up sampling (overflow signals) for the cycle counter
-    rc = PAPI_overflow(_event_set, PAPI_TOT_CYC, cycle_period, 0, handler);
+    rc = PAPI_overflow(_event_set, cyc_event, cycle_period, 0, handler);
     REQUIRE(rc == PAPI_OK, "Failed to set up cycle counter sampling: %s", PAPI_strerror(rc));
     
     // Set up sampling (overflow signals) for the instruction counter
-    rc = PAPI_overflow(_event_set, PAPI_TOT_INS, inst_period, 0, handler);
+    rc = PAPI_overflow(_event_set, inst_event, inst_period, 0, handler);
     REQUIRE(rc == PAPI_OK, "Failed to set up instruction counter sampling: %s", PAPI_strerror(rc));
     
     PAPI_start(_event_set);
