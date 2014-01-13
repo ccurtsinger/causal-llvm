@@ -33,7 +33,7 @@ namespace papi {
     rc = PAPI_event_name_to_code((char*)"PERF_COUNT_HW_CPU_CYCLES", &cyc_event);
     REQUIRE(rc == PAPI_OK, "Failed to find cycle count event: %s", PAPI_strerror(rc));
     
-    rc = PAPI_event_name_to_code((char*)"INST_RETIRED:PREC_DIST", &inst_event);
+    rc = PAPI_event_name_to_code((char*)"INST_RETIRED:ALL:k=1:u=1", &inst_event);
     if(rc != PAPI_OK) {
       rc = PAPI_event_name_to_code((char*)"RETIRED_INSTRUCTIONS:k=1:u=1:e=0", &inst_event);
       REQUIRE(rc == PAPI_OK, "Failed to find instruction counter event: %s", PAPI_strerror(rc));
