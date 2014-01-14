@@ -2,6 +2,7 @@
 #define CAUSAL_RUNTIME_BINS_H
 
 #include <cstdint>
+#include <iostream>
 #include <string>
 
 #include "disassembler.h"
@@ -53,7 +54,16 @@ public:
     _range = interval(_range.getBase(), p); // Update this block's range
     return b;
   }
+  
+  void print(ostream& os) const {
+    os << _range << "\t" << getLength() << "\t" << getCycleSamples() << "\t" << getInstructionSamples();
+  }
 };
+
+static ostream& operator<<(ostream& os, const BasicBlock& b) {
+  b.print(os);
+  return os;
+}
 
 class Function : public SampleBin {
 private:

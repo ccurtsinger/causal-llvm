@@ -1,7 +1,10 @@
 #if !defined(CAUSAL_RUNTIME_INTERVAL_H)
 #define CAUSAL_RUNTIME_INTERVAL_H
 
-#include "stdint.h"
+#include <stdint.h>
+
+#include <ios>
+#include <iostream>
 
 class interval {
 private:
@@ -44,5 +47,12 @@ public:
   uintptr_t getBase() const { return _base; }
   uintptr_t getLimit() const { return _limit; }
 };
+
+static std::ostream& operator<<(std::ostream& os, const interval& i) {
+  auto old_flags =  os.flags(std::ios::hex | std::ios::showbase);
+  os << i.getBase() << "\t" << i.getLimit();
+  os.flags(old_flags);
+  return os;
+}
 
 #endif

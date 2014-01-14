@@ -15,6 +15,7 @@
 #include "disassembler.h"
 #include "elf.h"
 #include "log.h"
+#include "output.h"
 #include "papi.h"
 #include "real.h"
 #include "sampler.h"
@@ -29,6 +30,8 @@ class Causal {
 private:
   bool _initialized;
   pthread_t _profiler_thread;
+  
+  Output* _output;
   
   SampleBin _orphan;
   map<interval, File> _files;
@@ -108,7 +111,7 @@ private:
     while(true) {
       SampleBlock* block = sampler::getNextBlock();
       
-      if(block->getCount() > 0) {
+      /*if(block->getCount() > 0) {
         BasicBlock* b = getBlock(block->get(0).address);
         if(b != NULL) {
           INFO("Idle time end: %lu\n", getTime());
@@ -123,7 +126,7 @@ private:
           INFO("Idle time start: %lu\n", getTime());
           wait(Time_s);
         }
-      }
+      }*/
       
       for(Sample& s : block->getSamples()) {
         getBin(s.address).addSample(s.type);
@@ -234,6 +237,8 @@ public:
     if(__atomic_exchange_n(&_initialized, true, __ATOMIC_SEQ_CST) == false) {
       INFO("Initializing");
       
+      _output = new Output("test", CycleSamplePeriod, InstructionSamplePeriod);
+      
       // Set up PAPI
       papi::initialize();
       
@@ -291,25 +296,16 @@ public:
         // If this is a new file, print info
         if(current_file == NULL || !current_file->getRange().contains(block_base)) {
           current_file = &_files.find(block_base)->second;
-          fprintf(stderr, "%s (%p-%p)\n", current_file->getName().c_str(),
-            (void*)current_file->getRange().getBase(),
-            (void*)current_file->getRange().getLimit());
         }
         
         // If this is a new function, print info
         if(current_fn == NULL || !current_fn->getLoadedRange().contains(block_base)) {
           current_fn = &_functions.find(block_base)->second;
-          fprintf(stderr, "  %s (%p-%p)\n", current_fn->getName().c_str(),
-            (void*)current_fn->getLoadedRange().getBase(),
-            (void*)current_fn->getLoadedRange().getLimit());
         }
-        
-        fprintf(stderr, "    block at +%lu (%lu instructions)\n",
-          block_base - current_fn->getLoadedRange().getBase(),
-          b.getLength());
-        fprintf(stderr, "      cycle samples: %lu\n", b.getCycleSamples());
-        fprintf(stderr, "      instruction samples: %lu\n", b.getInstructionSamples());
+        _output->writeBlockStats(current_file->getName(), current_fn->getName(), b);
       }
+      
+      delete _output;
     }
   }
 };
