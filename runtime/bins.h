@@ -34,7 +34,7 @@ class BasicBlock : public SampleBin {
 private:
   interval _range;
   bool _entry;
-  size_t _length = 0;
+  size_t _length = 1;
 public:
   BasicBlock(interval range, bool entry) : _range(range), _entry(entry) {
     // Count instructions
