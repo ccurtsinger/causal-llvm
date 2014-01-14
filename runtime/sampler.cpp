@@ -1,6 +1,8 @@
 #include "sampler.h"
 
 #include <pthread.h>
+
+#include <atomic>
 #include <list>
 #include <new>
 
@@ -21,6 +23,25 @@ GlobalBlockList& getGlobalBlocks() {
   static GlobalBlockList* global_blocks = new(buf) GlobalBlockList();
   return *global_blocks;
 }
+
+/// The current sampler mode
+atomic<SamplerMode> mode = ATOMIC_VAR_INIT(SamplerMode::Normal);
+/// The range of addresses used for speedup/slowdown
+interval perturbed_range;
+/// The size of the delay to insert in slowdown/speedup mode
+size_t delay_size;
+
+/// The round number for delays (speedup/slowdown)
+atomic<size_t> delay_round = ATOMIC_VAR_INIT(0);
+/// The global count of delays to insert
+atomic<size_t> delay_count = ATOMIC_VAR_INIT(0);
+/// The global count of delays actually executed
+atomic<size_t> executed_delay_count = ATOMIC_VAR_INIT(0);
+
+/// The thread local delay round
+__thread size_t local_delay_round = 0;
+/// The thread local count of delays inserted
+__thread size_t local_delay_count;
 
 /// Magic variable used to ensure the local block pointer is initialized
 __thread int local_magic;
@@ -45,11 +66,15 @@ void submitLocalBlock() {
 SampleBlock* getLocalBlock() {
   if(local_magic != 0xD00FCA75 || local_block == NULL) {
     local_magic = 0xD00FCA75;
-    local_block = new SampleBlock();
+    local_block = new SampleBlock(mode);
   } else if(local_block->isFull()) {
     submitLocalBlock();
-    local_block = new SampleBlock();
+    local_block = new SampleBlock(mode);
+  } else if(local_block->getMode() != mode) {
+    submitLocalBlock();
+    local_block = new SampleBlock(mode);
   }
+  
   return local_block;
 }
 
@@ -57,7 +82,7 @@ SampleBlock* getLocalBlock() {
 void flushLocalBlock() {
   if(local_magic == 0xD00FCA75 && local_block != NULL) {
     submitLocalBlock();
-    local_block = new SampleBlock();
+    local_block = new SampleBlock(mode);
   }
 }
 
@@ -74,11 +99,75 @@ static void overflowHandler(int event_set, void* address, long long vec, void* c
 
   if(vec & InstructionSampleMask) {
     getLocalBlock()->add(SampleType::Instruction, (uintptr_t)address);
+    
+    if(mode.load() == SamplerMode::Slowdown && perturbed_range.contains((uintptr_t)address)) {
+      // Reset the local delay count if this is a new round
+      if(local_delay_round != delay_round) {
+        local_delay_round = delay_round;
+        local_delay_count = 0;
+      }
+      delay_count++;
+      local_delay_count++;
+      wait(delay_size);
+      
+    } else if(mode.load() == SamplerMode::Speedup) {
+      // Reset the local delay count if this is a new round
+      if(local_delay_round != delay_round) {
+        local_delay_round = delay_round;
+        local_delay_count = 0;
+      }
+      
+      // Wait to catch up to the global delay count
+      while(local_delay_count < delay_count.load()) {
+        size_t old_local_count = local_delay_count;
+        local_delay_count++;
+        wait(delay_size);
+        // Update the executed delay count if this thread was the straggler
+        executed_delay_count.compare_exchange_strong(old_local_count, local_delay_count);
+      }
+      
+      // When we get a sample in the perturbed range, make other threads delay
+      if(perturbed_range.contains((uintptr_t)address)) {
+        local_delay_count++;
+        delay_count++;
+      }
+    }
   }
 }
 
 // The public API
 namespace sampler {
+  void startSlowdown(interval r, size_t d) {
+    perturbed_range = r;
+    delay_size = d;
+    
+    // Advance to the next delay round (causes threads to reset their local counts to zero)
+    delay_round++;
+    // Reset the global delay count
+    delay_count.store(0);
+    executed_delay_count.store(0);
+    
+    mode.store(SamplerMode::Slowdown);
+  }
+  
+  void startSpeedup(interval r, size_t d) {
+    perturbed_range = r;
+    delay_size = d;
+    
+    // Advance to the next delay round (causes threads to reset their local counts to zero)
+    delay_round++;
+    // Reset the global delay count
+    delay_count.store(0);
+    executed_delay_count.store(0);
+    
+    mode.store(SamplerMode::Speedup);
+  }
+  
+  size_t reset() {
+    mode.store(SamplerMode::Normal);
+    return executed_delay_count.load();
+  }
+  
   SampleBlock* getNextBlock() {
     // Lock the global blocks list
     pthread_mutex_lock(&mtx);
@@ -94,6 +183,11 @@ namespace sampler {
   }
 
   void initializeThread(size_t cycle_period, size_t inst_period) {
+    // Set the thread-local delay round and counts to match the global executed count
+    // This thread is just being created, so it should inherit from the source thread
+    local_delay_round = delay_round.load();
+    local_delay_count = executed_delay_count.load();
+    
     papi::startThread(cycle_period, inst_period, overflowHandler);
   }
 

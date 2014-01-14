@@ -3,7 +3,9 @@
 #include <new>
 
 #include "causal.h"
+#include "counter.h"
 #include "heap.h"
+#include "log.h"
 #include "real.h"
 
 #include "../include/causal.h"
@@ -24,15 +26,18 @@ CausalHeap& getPrivateHeap() {
 
 extern "C" {
   void __causal_register_counter(int kind, size_t* ctr, const char* file, int line) {
-    /*if(kind == PROGRESS_COUNTER) {
-      fprintf(stderr, "Progress counter: %s:%d (%p)\n", file, line, ctr);
+    if(kind == PROGRESS_COUNTER) {
+      Causal::getInstance().addProgressCounter(new Counter(file, line, ctr));
+      INFO("Found progress counter at %s:%d", file, line);
     } else if (kind == BEGIN_COUNTER) {
-      fprintf(stderr, "Transaction begin counter: %s:%d (%p)\n", file, line, ctr);
+      Causal::getInstance().addBeginCounter(new Counter(file, line, ctr));
+      INFO("Found transaction begin counter at %s:%d", file, line);
     } else if (kind == END_COUNTER) {
-      fprintf(stderr, "Transaction end counter: %s:%d (%p)\n", file, line, ctr);
+      Causal::getInstance().addEndCounter(new Counter(file, line, ctr));
+      INFO("Found transaction end counter at %s:%d", file, line);
     } else {
-      fprintf(stderr, "Unknown counter type: %s:%d (%p)\n", file, line, ctr);
-    }*/
+      WARNING("Unknown counter type registered from %s:%d", file, line);
+    }
   }
 }
 

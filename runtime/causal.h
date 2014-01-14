@@ -8,8 +8,10 @@
 #include <set>
 #include <stack>
 #include <thread>
+#include <vector>
 
 #include "bins.h"
+#include "counter.h"
 #include "disassembler.h"
 #include "elf.h"
 #include "log.h"
@@ -20,7 +22,7 @@
 
 enum {
   CycleSamplePeriod = 10000000,
-  InstructionSamplePeriod = 500000
+  InstructionSamplePeriod = 500011
 };
 
 class Causal {
@@ -33,9 +35,44 @@ private:
   map<interval, Function> _functions;
   map<interval, BasicBlock> _blocks;
   
+  vector<Counter*> _progress_counters;
+  
 	Causal() : _initialized(false) {
     initialize();
 	}
+  
+  void printCounters() {
+    size_t i = 0;
+    for(Counter* c : _progress_counters) {
+      fprintf(stderr, "%lu:%lu\n", i, c->getValue());
+      i++;
+    }
+  }
+  
+  BasicBlock* getBlock(uintptr_t p) {
+    // Try to find a matching block. If one exists, return immediately
+    map<interval, BasicBlock>::iterator b = _blocks.find(p);
+    if(b != _blocks.end()) return &b->second;
+    
+    // No luck. Try to find a matching function
+    map<interval, Function>::iterator fn = _functions.find(p);
+    if(fn != _functions.end()) {
+      if(fn->second.isProcessed()) {
+        // If the function has already been processed, then we're not going to find a block
+        return NULL;
+      } else {
+        // Function hasn't been disassembled yet. Process it
+        findBlocks(fn->second.getLoadedRange());
+        fn->second.setProcessed();
+        // Can we find a block now?
+        b = _blocks.find(p);
+        if(b != _blocks.end()) return &b->second;
+        else return NULL;
+      }
+    } else {
+      return NULL;
+    }
+  }
   
   SampleBin& getBin(uintptr_t p) {
     // Try to find a matching block. If one exists, return immediately
@@ -70,6 +107,23 @@ private:
   void profiler() {
     while(true) {
       SampleBlock* block = sampler::getNextBlock();
+      
+      if(block->getCount() > 0) {
+        BasicBlock* b = getBlock(block->get(0).address);
+        if(b != NULL) {
+          INFO("Idle time end: %lu\n", getTime());
+          INFO("Speeding up range %p-%p", 
+            (void*)b->getRange().getBase(), (void*)b->getRange().getLimit());
+          printCounters();
+          sampler::startSpeedup(b->getRange(), Time_ms);
+          size_t elapsed = wait(Time_s);
+          printCounters();
+          size_t delays = sampler::reset();
+          INFO("Inserted %lu delays in %fms", delays, (float)elapsed / Time_ms);
+          INFO("Idle time start: %lu\n", getTime());
+          wait(Time_s);
+        }
+      }
       
       for(Sample& s : block->getSamples()) {
         getBin(s.address).addSample(s.type);
@@ -195,6 +249,26 @@ public:
     }
   }
   
+  void addProgressCounter(Counter* c) {
+    _progress_counters.push_back(c);
+  }
+  
+  void addBeginCounter(Counter* c) {
+    WARNING("Transaction counters are not supported yet");
+  }
+  
+  void addEndCounter(Counter* c) {
+    WARNING("Transaction counters are not supported yet");
+  }
+  
+  void initializeThread() {
+    sampler::initializeThread(CycleSamplePeriod, InstructionSamplePeriod);
+  }
+  
+  void shutdownThread() {
+    sampler::shutdownThread();
+  }
+  
   void reinitialize() {
     INFO("Reinitializing");
     __atomic_store_n(&_initialized, false, __ATOMIC_SEQ_CST);
@@ -237,14 +311,6 @@ public:
         fprintf(stderr, "      instruction samples: %lu\n", b.getInstructionSamples());
       }
     }
-  }
-  
-  void initializeThread() {
-    sampler::initializeThread(CycleSamplePeriod, InstructionSamplePeriod);
-  }
-  
-  void shutdownThread() {
-    sampler::shutdownThread();
   }
 };
 

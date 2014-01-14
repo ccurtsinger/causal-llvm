@@ -18,13 +18,12 @@ static void __init_counter(int kind, size_t* ctr, const char* filename, int line
 
 #define CAUSAL_INCREMENT_COUNTER(kind, file, line) \
   if(1) { \
-    static __thread unsigned char __causal_counter_initialized = 0; \
-    static __thread size_t __causal_counter = 0; \
-    if(__causal_counter_initialized == 0) { \
+    static unsigned char __causal_counter_initialized = 0; \
+    static size_t __causal_counter = 0; \
+    if(__atomic_exchange_n(&__causal_counter_initialized, 1, __ATOMIC_SEQ_CST) == 0) { \
       __init_counter(kind, &__causal_counter, file, line); \
-      __causal_counter_initialized = 1; \
     } \
-    __causal_counter++; \
+    __atomic_fetch_add(&__causal_counter, 1, __ATOMIC_SEQ_CST); \
   }
 
 #define PROGRESS_COUNTER 1
