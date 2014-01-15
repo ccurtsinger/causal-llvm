@@ -22,7 +22,11 @@ for line in f:
     length = int(length_str)
     cyc = int(cyc_str)
     inst = int(inst_str)
+    base = int(base_str, 16)
+    limit = int(limit_str, 16)
     
     trips = float(inst_period * inst) / length
     
-    print file, fn, base_str, "called", int(trips), "times"
+    print file, fn, base_str, inst
+    print "  has", length, "instructions"
+    print "  executed", int(trips), "times"

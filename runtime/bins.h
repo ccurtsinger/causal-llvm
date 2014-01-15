@@ -38,7 +38,7 @@ private:
 public:
   BasicBlock(interval range, bool entry) : _range(range), _entry(entry) {
     // Count instructions
-    for(disassembler i(range); !i.done(); i.next()) {
+    for(disassembler i(range); !i.done() && !i.branches(); i.next()) {
       _length++;
     }
   }

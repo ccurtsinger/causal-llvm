@@ -31,6 +31,8 @@ private:
   bool _initialized;
   pthread_t _profiler_thread;
   
+  size_t _instruction_samples = 0;
+  
   Output* _output;
   
   SampleBin _orphan;
@@ -130,6 +132,9 @@ private:
       
       for(Sample& s : block->getSamples()) {
         getBin(s.address).addSample(s.type);
+        if(s.type == SampleType::Instruction) {
+          _instruction_samples++;
+        }
       }
       
       delete block;
@@ -146,6 +151,11 @@ private:
     std::set<uintptr_t> block_bases;
     std::stack<uintptr_t> q;
     q.push(range.getBase());
+    
+    bool print = false;
+    if(range.getBase() == 0x400620) {
+      print = true;
+    }
 
     while(q.size() > 0) {
       uintptr_t p = q.top();
@@ -154,12 +164,45 @@ private:
       // Skip null or already-seen pointers
       if(p == 0 || block_bases.find(p) != block_bases.end())
         continue;
+      
+      if(print) {
+        INFO("Block start at %p", (void*)p);
+      }
   
       // This is a new block starting address
       block_bases.insert(p);
   
+      disassembler i(p, range.getLimit());
+      bool block_ended = false;
+      do {
+        // Any branch ends a basic block
+        if(i.branches()) {
+          block_ended = true;
+          
+          // If the block falls through, start a new block at the next instruction
+          if(i.fallsThrough())
+            q.push(i.limit());
+          
+          // Add the branch target
+          branch_target target = i.target();
+          if(target.dynamic()) {
+            WARNING("Unhandled dynamic branch target: %s", i.toString());
+          } else {
+            uintptr_t t = target.value();
+            if(print) {
+              INFO("Jump from %p to %p", (void*)i.base(), (void*)t);
+            }
+            
+            if(range.contains(t))
+              q.push(t);
+          }
+        }
+        
+        i.next();
+      } while(!block_ended && !i.done());
+  
       // Disassemble the new basic block
-      for(disassembler inst = disassembler(p, range.getLimit()); !inst.done() && inst.fallsThrough(); inst.next()) {
+      /*for(disassembler inst = disassembler(p, range.getLimit()); !inst.done() && inst.fallsThrough(); inst.next()) {
         if(inst.branches()) {
           branch_target target = inst.target();
           if(target.dynamic()) {
@@ -170,7 +213,7 @@ private:
               q.push(t);
           }
         }
-      }
+      }*/
     }
 
     // Create basic block objects
@@ -306,6 +349,8 @@ public:
       }
       
       delete _output;
+      
+      INFO("%lu instruction samples total", _instruction_samples);
     }
   }
 };

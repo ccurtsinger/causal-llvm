@@ -49,9 +49,7 @@ public:
 };
 
 static std::ostream& operator<<(std::ostream& os, const interval& i) {
-  auto old_flags =  os.flags(std::ios::hex | std::ios::showbase);
-  os << i.getBase() << "\t" << i.getLimit();
-  os.flags(old_flags);
+  os << std::hex << "0x" << i.getBase() << "\t0x" << i.getLimit() << std::dec;
   return os;
 }
 
