@@ -47,6 +47,8 @@ __thread size_t local_delay_count;
 __thread int local_magic;
 /// The thread-local sample block pointer
 __thread SampleBlock* local_block;
+/// Set to false when sampling should finish up
+atomic<bool> active = ATOMIC_VAR_INIT(true);
 
 /// Push the current thread's sample block to the global list
 void submitLocalBlock() {
@@ -93,6 +95,11 @@ enum {
 
 /// Signal handler for PAPI's instruction and cycle sampling
 static void overflowHandler(int event_set, void* address, long long vec, void* context) {
+  if(!active) {
+    flushLocalBlock();
+    return;
+  }
+  
   if(vec & CycleSampleMask) {
     getLocalBlock()->add(SampleType::Cycle, (uintptr_t)address);
   }
@@ -173,6 +180,10 @@ namespace sampler {
     pthread_mutex_lock(&mtx);
     // Wait while the list is empty
     while(getGlobalBlocks().size() == 0) {
+      // When sampling is inactive and there are no global blocks, just return NULL
+      if(!active.load()) {
+        return NULL;
+      }
       pthread_cond_wait(&cv, &mtx);
     }
     // Take the first block off the list
@@ -194,5 +205,10 @@ namespace sampler {
   void shutdownThread() {
     papi::stopThread();
     flushLocalBlock();
+  }
+  
+  void finish() {
+    active.store(false);
+    pthread_cond_signal(&cv);
   }
 }

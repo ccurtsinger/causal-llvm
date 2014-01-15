@@ -31,8 +31,6 @@ private:
   bool _initialized;
   pthread_t _profiler_thread;
   
-  size_t _instruction_samples = 0;
-  
   Output* _output;
   
   SampleBin _orphan;
@@ -113,6 +111,9 @@ private:
     while(true) {
       SampleBlock* block = sampler::getNextBlock();
       
+      if(block == NULL)
+        return;
+      
       /*if(block->getCount() > 0) {
         BasicBlock* b = getBlock(block->get(0).address);
         if(b != NULL) {
@@ -132,9 +133,6 @@ private:
       
       for(Sample& s : block->getSamples()) {
         getBin(s.address).addSample(s.type);
-        if(s.type == SampleType::Instruction) {
-          _instruction_samples++;
-        }
       }
       
       delete block;
@@ -151,11 +149,6 @@ private:
     std::set<uintptr_t> block_bases;
     std::stack<uintptr_t> q;
     q.push(range.getBase());
-    
-    bool print = false;
-    if(range.getBase() == 0x400620) {
-      print = true;
-    }
 
     while(q.size() > 0) {
       uintptr_t p = q.top();
@@ -164,10 +157,6 @@ private:
       // Skip null or already-seen pointers
       if(p == 0 || block_bases.find(p) != block_bases.end())
         continue;
-      
-      if(print) {
-        INFO("Block start at %p", (void*)p);
-      }
   
       // This is a new block starting address
       block_bases.insert(p);
@@ -189,9 +178,6 @@ private:
             WARNING("Unhandled dynamic branch target: %s", i.toString());
           } else {
             uintptr_t t = target.value();
-            if(print) {
-              INFO("Jump from %p to %p", (void*)i.base(), (void*)t);
-            }
             
             if(range.contains(t))
               q.push(t);
@@ -326,6 +312,12 @@ public:
     if(__atomic_exchange_n(&_initialized, false, __ATOMIC_SEQ_CST) == true) {
       INFO("Shutting down");
       
+      sampler::finish();
+      
+      INFO("Waiting for profiler thread to finish...");
+      pthread_join(_profiler_thread, NULL);
+      INFO("Done.");
+      
       const File* current_file = NULL;
       const Function* current_fn = NULL;
       
@@ -349,8 +341,6 @@ public:
       }
       
       delete _output;
-      
-      INFO("%lu instruction samples total", _instruction_samples);
     }
   }
 };

@@ -35,7 +35,7 @@ namespace papi {
     
     rc = PAPI_event_name_to_code((char*)"INST_RETIRED:ALL:k=1:u=1", &inst_event);
     if(rc != PAPI_OK) {
-      rc = PAPI_event_name_to_code((char*)"RETIRED_INSTRUCTIONS:k=0:u=1", &inst_event);
+      rc = PAPI_event_name_to_code((char*)"RETIRED_INSTRUCTIONS:k=1:u=1", &inst_event);
       //rc = PAPI_event_name_to_code((char*)"perf::INSTRUCTIONS", &inst_event);
       REQUIRE(rc == PAPI_OK, "Failed to find instruction counter event: %s", PAPI_strerror(rc));
     }

@@ -74,6 +74,8 @@ namespace sampler {
   void startSpeedup(interval range, size_t delay_size);
   /// Return to normal sampling mode. Returns the total number of delays inserted.
   size_t reset();
+  /// Stop saving samples and flush all remaining
+  void finish();
 }
 
 #endif
